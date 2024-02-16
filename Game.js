@@ -1,5 +1,8 @@
 import { Player } from "./Player.js"
-import { Enemy } from "./Enemy.js"
+import { Wall } from "./Wall.js"
+import { BrownTank } from "./EnemyTypes/BrownTank.js"
+import { GreyTank } from "./EnemyTypes/GrayTank.js";
+import { GreenTank } from "./EnemyTypes/GreenTank.js";
 
 // PixiJS setup
 const app = new PIXI.Application({
@@ -9,9 +12,29 @@ const app = new PIXI.Application({
 });
 document.getElementById('gameContainer').appendChild(app.view);
 
+let mapInts = [];
+let mapWalls = [];
+const rows = 30;
+const cols = 40;
+for (let i = 0; i < rows; i++) {
+    let tempInts = [];
+    let tempWalls = [];
+    for (let j = 0; j < cols; j++) {
+        if (i == 0 || i == rows - 1 || j == 0 || j == cols - 1) {
+            tempInts.push(1);
+            let wall = new Wall(j * 20, i * 20, 20, 20, -1);
+            tempWalls.push(wall);
+            app.stage.addChild(wall.body)
+        } else {
+            tempInts.push(0)
+        }
+    }
+    mapInts.push(tempInts);
+    mapWalls.push(tempWalls);
+}
+
 let mouseX = 0;
 let mouseY = 0;
-let rightMouseDown = false;
 
 let lastFrameTime = Date.now();
 let frameCount = 0;
@@ -20,11 +43,17 @@ let fps = 0;
 let fpsText = null;
 let circleText = null;
 
-const player = new Player(300, 300, 20, 25, 2.5); // Example position and size
+const player = new Player(700, 100, 15, 20, 2.75);
 app.stage.addChild(player.body);
 
-const enemy = new Enemy(500, 500, 20, 25, 2.5);
-app.stage.addChild(enemy.body)
+const enemy1 = new BrownTank(700, 500, 15, 20);
+app.stage.addChild(enemy1.body)
+
+const enemy2 = new GreyTank(100, 500, 15, 20, 1.75);
+app.stage.addChild(enemy2.body)
+
+const enemy3 = new GreenTank(100, 100, 15, 20, 1.75);
+app.stage.addChild(enemy3.body)
 
 loadUI();
 
@@ -70,12 +99,12 @@ function loadUI() {
     fpsText = new PIXI.Text("FPS: " + calculateFPS(), style);
     fpsText.x = 10;
     fpsText.y = 10;
-    app.stage.addChild(fpsText);
+    // app.stage.addChild(fpsText);
 
-    circleText = new PIXI.Text("Count: ",  style);
+    circleText = new PIXI.Text("Count: ", style);
     circleText.x = 200;
     circleText.y = 10;
-    app.stage.addChild(circleText);
+    // app.stage.addChild(circleText);
 }
 
 function calculateFPS() {
@@ -92,7 +121,16 @@ function calculateFPS() {
 app.ticker.add((delta) => gameLoop(delta));
 
 function gameLoop(delta) {
-    fpsText.text = "FPS: " + calculateFPS()
-    circleText.text = "Count: " 
-    player.update(delta)
+    player.update(delta, mapWalls);
+
+    // Update bullets
+    for (let i = player.bullets.length - 1; i >= 0; i--) {
+        const bullet = player.bullets[i];
+        bullet.update(delta, mapWalls);
+
+        if (bullet.toDestroy) {
+            app.stage.removeChild(bullet.body);
+            player.bullets.splice(i, 1);
+        }
+    }
 }

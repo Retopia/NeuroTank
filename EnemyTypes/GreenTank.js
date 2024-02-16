@@ -1,10 +1,8 @@
-import { Bullet } from "./Bullet.js"
-
-export class Enemy {
+export class GreenTank {
 
     constructor(x, y, width, height, speed) {
-        this.body = PIXI.Sprite.from(PIXI.Texture.WHITE); // Create sprite from white texture
-        this.body.tint = 0xac6902; // Tint it black
+        this.body = PIXI.Sprite.from(PIXI.Texture.WHITE);
+        this.body.tint = 0x009530;
 
         this.setPosition(x, y);
         this.setSize(width, height);
