@@ -1,31 +1,24 @@
 // Bullet.js
 export class Bullet {
-    constructor(owner, x, y, velocityX, velocityY) {
-        // The tank that fired the bullet
+    constructor(owner, x, y) {
         this.owner = owner;
 
         this.body = new PIXI.Container();
 
-        // const border = new PIXI.Graphics();
-        // border.beginFill(0x000000);
-        // border.drawRect(-1, -1, 11, 6); // Slightly larger than the bullet
-        // border.endFill();
-        // this.body.addChild(border);
-
         this.bounces = 0;
         this.toDestroy = false;
 
+        this.bulletSpeed = 3.25
+
         // Yellow bullet
         const bullet = new PIXI.Graphics();
-        bullet.beginFill(0xfabb55); // Yellow color
+        bullet.beginFill(0xfabb55);
         bullet.drawRect(0, 0, 10, 5); // Bullet size
         bullet.endFill();
         this.body.addChild(bullet);
 
-        // Set position and velocity
+        // Set position
         this.body.position.set(x, y);
-        this.velocityX = velocityX;
-        this.velocityY = velocityY;
     }
 
     rectanglesCollide(rect1, rect2) {
@@ -52,6 +45,12 @@ export class Bullet {
             overlapX: overlapX,
             overlapY: overlapY
         };
+    }
+
+    fire(angle) {
+        this.velocityX = Math.cos(angle) * this.bulletSpeed;
+        this.velocityY = Math.sin(angle) * this.bulletSpeed;
+        this.body.rotation = angle
     }
 
     update(delta, walls) {

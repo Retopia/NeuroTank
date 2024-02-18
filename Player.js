@@ -1,4 +1,4 @@
-import { Bullet } from "./Bullet.js"
+import { Bullet } from "./BulletTypes/Bullet.js"
 
 // player.js
 export class Player {
@@ -13,6 +13,8 @@ export class Player {
         this.speed = speed;
         this.keyState = {};
         this.bullets = [];
+
+        this.maxBullets = 5;
 
         this.turret = new PIXI.Graphics();
         this.turret.beginFill(0x0000ff);
@@ -87,19 +89,21 @@ export class Player {
     }
 
     fireBullet() {
-        const angle = this.body.rotation + this.turret.rotation; // Combined rotation
-        const bulletSpeed = 4;
-        const velocityX = Math.cos(angle) * bulletSpeed;
-        const velocityY = Math.sin(angle) * bulletSpeed;
+        // Limit the amount of bullets that tanks can fire
+        if (this.bullets.length < this.maxBullets) {
+            const angle = this.body.rotation + this.turret.rotation; // Combined rotation
 
-        // Calculate the starting position at the tip of the turret
-        const startX = this.body.x + this.turret.x + Math.cos(angle) * this.turret.width;
-        const startY = this.body.y + this.turret.y + Math.sin(angle) * this.turret.width;
+            // Calculate the starting position at the tip of the turret
+            const startX = this.body.x + this.turret.x + Math.cos(angle) * 30;
+            const startY = this.body.y + this.turret.y + Math.sin(angle) * 30;
 
-        const bullet = new Bullet(this, startX, startY, velocityX, velocityY);
-        bullet.body.rotation = angle
-        this.bullets.push(bullet);
-        return bullet;
+            const bullet = new Bullet(this, startX, startY);
+            bullet.fire(angle)
+
+            this.bullets.push(bullet);
+            return bullet;
+        }
+        return null;
     }
 
     update(delta, walls) { // Add walls as a parameter

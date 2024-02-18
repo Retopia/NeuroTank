@@ -1,3 +1,4 @@
+import { FireBullet } from "../BulletTypes/FireBullet.js"
 export class GreenTank {
 
     constructor(x, y, width, height, speed) {
@@ -10,6 +11,10 @@ export class GreenTank {
 
         this.speed = speed;
         this.bullets = [];
+
+        this.maxBullets = 5;
+        this.previousShotTime = Date.now();
+        this.shotDelay = 3000;
 
         this.turret = new PIXI.Graphics();
         this.turret.beginFill(0x965d00);
@@ -29,5 +34,44 @@ export class GreenTank {
     setSize(width, height) {
         this.body.width = width;
         this.body.height = height;
+    }
+
+    rotateTurret(targetX, targetY) {
+        const turretBaseWorldX = this.body.x + this.body.width / 2;
+        const turretBaseWorldY = this.body.y + this.body.height / 2;
+
+        const dx = targetX - turretBaseWorldX;
+        const dy = targetY - turretBaseWorldY;
+        const angle = Math.atan2(dy, dx);
+
+        this.turret.rotation = angle;
+    }
+
+    fireBullet() {
+        // Limit the amount of bullets that tanks can fire
+        if (this.bullets.length < this.maxBullets) {
+            const angle = this.body.rotation + this.turret.rotation; // Combined rotation
+
+            // Calculate the starting position at the tip of the turret
+            const startX = this.body.x + this.turret.x + Math.cos(angle) * 30;
+            const startY = this.body.y + this.turret.y + Math.sin(angle) * 30;
+
+            const bullet = new FireBullet(this, startX, startY);
+            bullet.fire(angle)
+
+            this.bullets.push(bullet);
+            return bullet;
+        }
+        return null;
+    }
+
+    update(delta, walls, player) {
+        let res = null;
+        this.rotateTurret(player.body.x + player.body.width / 2, player.body.y + player.body.height / 2);
+        if (Date.now() - this.previousShotTime > this.shotDelay) {
+            this.previousShotTime = Date.now();
+            res = this.fireBullet();
+        }
+        return res;
     }
 }

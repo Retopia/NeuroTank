@@ -14,8 +14,11 @@ document.getElementById('gameContainer').appendChild(app.view);
 
 let mapInts = [];
 let mapWalls = [];
+let tanks = [];
+
 const rows = 30;
 const cols = 40;
+
 for (let i = 0; i < rows; i++) {
     let tempInts = [];
     let tempWalls = [];
@@ -43,19 +46,15 @@ let fps = 0;
 let fpsText = null;
 let circleText = null;
 
-const player = new Player(700, 100, 15, 20, 2.75);
-app.stage.addChild(player.body);
+const player = new Player(700, 100, 15, 20, 2);
+const brown = new BrownTank(700, 500, 15, 20);
+const grey = new GreyTank(100, 500, 15, 20, 1.5);
+const green = new GreenTank(100, 100, 15, 20, 1.5);
 
-const enemy1 = new BrownTank(700, 500, 15, 20);
-app.stage.addChild(enemy1.body)
+app.stage.addChild(player.body, brown.body, grey.body, green.body)
+tanks.push(player, brown, grey, green);
 
-const enemy2 = new GreyTank(100, 500, 15, 20, 1.75);
-app.stage.addChild(enemy2.body)
-
-const enemy3 = new GreenTank(100, 100, 15, 20, 1.75);
-app.stage.addChild(enemy3.body)
-
-loadUI();
+// loadUI();
 
 app.renderer.plugins.interaction.on('pointermove', function (e) {
     const newPosition = e.data.global;
@@ -70,24 +69,15 @@ app.renderer.view.addEventListener('contextmenu', function (e) {
 
 app.renderer.plugins.interaction.on('pointerdown', function (e) {
     if (e.data.button === 0) {
-        const angle = player.body.rotation;
-        const velocityX = Math.cos(angle) * 5;
-        const velocityY = Math.sin(angle) * 5;
-        const bulletX = player.body.x + Math.cos(angle) * 30; // Adjust spawn position
-        const bulletY = player.body.y + Math.sin(angle) * 30;
-        const bullet = player.fireBullet(bulletX, bulletY, velocityX, velocityY);
-        app.stage.addChild(bullet.body);
-    }
-
-    if (e.data.button === 2) {
-        rightMouseDown = true;
+        const bullet = player.fireBullet();
+        if (bullet) {
+            app.stage.addChild(bullet.body);
+        }
     }
 });
 
 app.renderer.plugins.interaction.on('pointerup', function (e) {
-    if (e.data.button === 2) {
-        rightMouseDown = false;
-    }
+    // Deprecated for now
 });
 
 function loadUI() {
@@ -123,14 +113,26 @@ app.ticker.add((delta) => gameLoop(delta));
 function gameLoop(delta) {
     player.update(delta, mapWalls);
 
-    // Update bullets
-    for (let i = player.bullets.length - 1; i >= 0; i--) {
-        const bullet = player.bullets[i];
-        bullet.update(delta, mapWalls);
+    // Updating all tank bullets
+    for (let t = 0; t < tanks.length; t++) {
+        const tank = tanks[t];
 
-        if (bullet.toDestroy) {
-            app.stage.removeChild(bullet.body);
-            player.bullets.splice(i, 1);
+        // Bullets shot by the player are handled differently
+        if (tank != player) {
+            let tankReturnValue = tank.update(delta, mapWalls, player)
+            if (tankReturnValue) {
+                app.stage.addChild(tankReturnValue.body);
+            }
+        }
+
+        for (let i = tank.bullets.length - 1; i >= 0; i--) {
+            const bullet = tank.bullets[i];
+            bullet.update(delta, mapWalls);
+
+            if (bullet.toDestroy) {
+                app.stage.removeChild(bullet.body);
+                tank.bullets.splice(i, 1);
+            }
         }
     }
 }
