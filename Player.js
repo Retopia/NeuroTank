@@ -12,8 +12,8 @@ export class Player {
 
         this.speed = speed;
         this.keyState = {};
-        this.bullets = [];
 
+        this.firedBullets = 0;
         this.maxBullets = 5;
 
         this.turret = new PIXI.Graphics();
@@ -100,7 +100,7 @@ export class Player {
             const bullet = new Bullet(this, startX, startY);
             bullet.fire(angle)
 
-            this.bullets.push(bullet);
+            this.firedBullets += 1
             return bullet;
         }
         return null;

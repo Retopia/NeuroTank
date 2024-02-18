@@ -10,7 +10,7 @@ export class GreenTank {
 
 
         this.speed = speed;
-        this.bullets = [];
+        this.firedBullets = 0;
 
         this.maxBullets = 5;
         this.previousShotTime = Date.now();
@@ -49,7 +49,7 @@ export class GreenTank {
 
     fireBullet() {
         // Limit the amount of bullets that tanks can fire
-        if (this.bullets.length < this.maxBullets) {
+        if (this.firedBullets < this.maxBullets) {
             const angle = this.body.rotation + this.turret.rotation; // Combined rotation
 
             // Calculate the starting position at the tip of the turret
@@ -59,7 +59,7 @@ export class GreenTank {
             const bullet = new FireBullet(this, startX, startY);
             bullet.fire(angle)
 
-            this.bullets.push(bullet);
+            this.firedBullets += 1;
             return bullet;
         }
         return null;

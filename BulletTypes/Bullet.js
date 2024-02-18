@@ -69,7 +69,6 @@ export class Bullet {
                         this.toDestroy = true;
                     } else {
                         // Determine if we should reflect horizontally or vertically
-                        const horizontalReflection = Math.abs(collision.dx) > Math.abs(collision.dy);
                         if (collision.overlapX < collision.overlapY) {
                             this.velocityX *= -1; // Reflect horizontally
                         } else {

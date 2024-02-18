@@ -15,6 +15,7 @@ document.getElementById('gameContainer').appendChild(app.view);
 let mapInts = [];
 let mapWalls = [];
 let tanks = [];
+let allBullets = [];
 
 const rows = 30;
 const cols = 40;
@@ -72,6 +73,7 @@ app.renderer.plugins.interaction.on('pointerdown', function (e) {
         const bullet = player.fireBullet();
         if (bullet) {
             app.stage.addChild(bullet.body);
+            this.allBullets.push(bullet);
         }
     }
 });
@@ -108,6 +110,27 @@ function calculateFPS() {
     return fps
 }
 
+function rectanglesCollide(rect1, rect2) {
+    if (rect1.x < rect2.x + rect2.width &&
+        rect1.x + rect1.width > rect2.x &&
+        rect1.y < rect2.y + rect2.height &&
+        rect1.y + rect1.height > rect2.y) {
+
+        return true;
+    }
+    return false;
+}
+
+function checkCollision(bullet) {
+    for (let t = 0; t < tanks.length; t++) {
+        const tank = tanks[t];
+        if (rectanglesCollide(bullet.body, tank.body)) {
+            return { tank: tank, tankIndex: t };
+        }
+    }
+    return null;
+}
+
 app.ticker.add((delta) => gameLoop(delta));
 
 function gameLoop(delta) {
@@ -119,19 +142,31 @@ function gameLoop(delta) {
 
         // Bullets shot by the player are handled differently
         if (tank != player) {
-            let tankReturnValue = tank.update(delta, mapWalls, player)
-            if (tankReturnValue) {
-                app.stage.addChild(tankReturnValue.body);
+            let firedBullet = tank.update(delta, mapWalls, player)
+            if (firedBullet) {
+                app.stage.addChild(firedBullet.body);
+                allBullets.push(firedBullet)
             }
         }
+    }
 
-        for (let i = tank.bullets.length - 1; i >= 0; i--) {
-            const bullet = tank.bullets[i];
+    for (let i = allBullets.length - 1; i >= 0; i--) {
+        const bullet = allBullets[i];
+        let collided = checkCollision(bullet);
+        if (collided) {
+            app.stage.removeChild(collided.tank.body);
+            tanks.splice(collided.tankIndex, 1);
+
+            app.stage.removeChild(bullet.body);
+            bullet.owner.firedBullet -= 1
+            allBullets.splice(i, 1)
+        } else {
             bullet.update(delta, mapWalls);
 
             if (bullet.toDestroy) {
                 app.stage.removeChild(bullet.body);
-                tank.bullets.splice(i, 1);
+                bullet.owner.firedBullets -= 1
+                allBullets.splice(i, 1)
             }
         }
     }
