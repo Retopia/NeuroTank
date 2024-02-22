@@ -62,19 +62,21 @@ export class Bullet {
         for (let i = 0; i < walls.length; i++) {
             for (let j = 0; j < walls[i].length; j++) {
                 let wall = walls[i][j]
-                const collision = this.detectCollision({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
-                if (collision.collided) {
-                    this.bounces += 1;
-                    if (this.bounces > 1) {
-                        this.toDestroy = true;
-                    } else {
-                        // Determine if we should reflect horizontally or vertically
-                        if (collision.overlapX < collision.overlapY) {
-                            this.velocityX *= -1; // Reflect horizontally
+                if (wall.isWall) {
+                    const collision = this.detectCollision({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
+                    if (collision.collided) {
+                        this.bounces += 1;
+                        if (this.bounces > 1) {
+                            this.toDestroy = true;
                         } else {
-                            this.velocityY *= -1; // Reflect vertically
+                            // Determine if we should reflect horizontally or vertically
+                            if (collision.overlapX < collision.overlapY) {
+                                this.velocityX *= -1; // Reflect horizontally
+                            } else {
+                                this.velocityY *= -1; // Reflect vertically
+                            }
+                            break; // Handle one collision at a time
                         }
-                        break; // Handle one collision at a time
                     }
                 }
             }

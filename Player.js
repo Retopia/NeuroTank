@@ -90,7 +90,7 @@ export class Player {
 
     fireBullet() {
         // Limit the amount of bullets that tanks can fire
-        if (this.bullets.length < this.maxBullets) {
+        if (this.firedBullets < this.maxBullets) {
             const angle = this.body.rotation + this.turret.rotation; // Combined rotation
 
             // Calculate the starting position at the tip of the turret
@@ -130,11 +130,13 @@ export class Player {
         for (let i = 0; i < walls.length; i++) {
             for (let j = 0; j < walls[i].length; j++) {
                 let wall = walls[i][j]
-                const collision = this.rectanglesCollide({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
-                if (collision.collided) {
-                    this.resolveCollision(this.body, wall.body, collision);
-                    collisionOccurred = true;
-                    break; // Resolve one collision at a time
+                if (wall.isWall) {
+                    const collision = this.rectanglesCollide({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
+                    if (collision.collided) {
+                        this.resolveCollision(this.body, wall.body, collision);
+                        collisionOccurred = true;
+                        break; // Resolve one collision at a time
+                    }
                 }
             }
         }
