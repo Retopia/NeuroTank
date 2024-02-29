@@ -58,6 +58,8 @@ export class Bullet {
         let newX = this.body.x + this.velocityX * delta;
         let newY = this.body.y + this.velocityY * delta;
 
+        let potentialCollisions = [];
+
         // Collision check with each wall
         for (let i = 0; i < walls.length; i++) {
             for (let j = 0; j < walls[i].length; j++) {
@@ -65,27 +67,50 @@ export class Bullet {
                 if (wall.isWall) {
                     const collision = this.detectCollision({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
                     if (collision.collided) {
-                        this.bounces += 1;
-                        if (this.bounces > 1) {
-                            this.toDestroy = true;
-                        } else {
-                            // Determine if we should reflect horizontally or vertically
-                            if (collision.overlapX < collision.overlapY) {
-                                this.velocityX *= -1; // Reflect horizontally
-                            } else {
-                                this.velocityY *= -1; // Reflect vertically
-                            }
-                            break; // Handle one collision at a time
-                        }
+                        potentialCollisions.push({ collision, wall });
                     }
                 }
             }
         }
 
-        // Update position
-        this.body.x += this.velocityX * delta;
-        this.body.y += this.velocityY * delta;
+        if (potentialCollisions.length > 0) {
+            // Resolve the most relevant collision
+            let resolved = this.resolveCollision(potentialCollisions, delta);
+            if (resolved) {
+                this.bounces++;
+                if (this.bounces > 1) {
+                    this.toDestroy = true;
+                }
+            }
+        } else {
+            // Update position if no collision
+            this.body.x = newX;
+            this.body.y = newY;
+        }
 
-        this.body.rotation = Math.atan2(this.velocityY, this.velocityX)
+        this.body.rotation = Math.atan2(this.velocityY, this.velocityX);
+    }
+
+    resolveCollision(collisions, delta) {
+        // Sort collisions based on the overlap and bullet's direction
+        collisions.sort((a, b) => {
+            let aPriority = (Math.abs(this.velocityX) > Math.abs(this.velocityY)) ? a.collision.overlapX : a.collision.overlapY;
+            let bPriority = (Math.abs(this.velocityX) > Math.abs(this.velocityY)) ? b.collision.overlapX : b.collision.overlapY;
+            return bPriority - aPriority;
+        });
+
+        let resolved = false;
+        for (let { collision } of collisions) {
+            if (collision.overlapX < collision.overlapY) {
+                this.velocityX *= -1; // Reflect horizontally
+                resolved = true;
+            } else {
+                this.velocityY *= -1; // Reflect vertically
+                resolved = true;
+            }
+            if (resolved) break;
+        }
+
+        return resolved;
     }
 }

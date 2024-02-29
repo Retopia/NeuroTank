@@ -6,8 +6,10 @@ import { GreenTank } from "./EnemyTypes/GreenTank.js";
 
 export class Game {
     constructor() {
-        this.map = []; // All the physical cells of the map
-        this.mapWalls = []; // All the physical walls
+        this.file = "./Maps/walls.txt"
+
+        this.map = []; // All the bitmask of the entire map
+        this.physicalMap = []; // All the physical walls
         this.tanks = [];
         this.allBullets = [];
         this.enableGridLines = true;
@@ -32,6 +34,7 @@ export class Game {
     setup() {
         document.getElementById('gameContainer').appendChild(this.app.view);
 
+        // Default map generation
         for (let i = 0; i < this.rows; i++) {
             let tempInts = [];
             let tempWalls = [];
@@ -48,8 +51,18 @@ export class Game {
                 this.app.stage.addChild(wall.body);
             }
             this.map.push(tempInts);
-            this.mapWalls.push(tempWalls);
+            this.physicalMap.push(tempWalls);
         }
+
+        if (this.file != null) {
+            this.loadMapFromPath(this.file).then(loadedMap => {
+                if (loadedMap) {
+                    this.updateMap(loadedMap);
+                }
+            });
+        }
+
+        this.grey.setPathfinder(this.physicalMap);
 
         if (this.enableGridLines) {
             let gridLines = new PIXI.Graphics();
@@ -74,7 +87,6 @@ export class Game {
             const newPosition = e.data.global;
             this.mouseX = newPosition.x;
             this.mouseY = newPosition.y;
-            this.player.rotateTurret(this.mouseX, this.mouseY);
         });
 
         this.app.renderer.view.addEventListener('contextmenu', (e) => {
@@ -89,6 +101,22 @@ export class Game {
                     this.allBullets.push(bullet);
                 }
             }
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const fileContent = e.target.result;
+                let loadedMap = this.loadMapFromFile(fileContent);
+                this.updateMap(loadedMap);
+            };
+
+            reader.readAsText(file);
         });
     }
 
@@ -142,8 +170,8 @@ export class Game {
         for (let i = 0; i < gridRows; i++) {
             for (let j = 0; j < gridCols; j++) {
                 this.mapDangerValues[i][j] = 0;
-                if (this.mapWalls.isWall) {
-                    this.mapWalls[i][j].body.tint = 0xFFFFFF;
+                if (this.physicalMap.isWall) {
+                    this.physicalMap[i][j].body.tint = 0xFFFFFF;
                 }
             }
         }
@@ -172,38 +200,54 @@ export class Game {
     }
 
     updateGridColors(maxDangerValue) {
-        for (let i = 0; i < this.map.length; i++) {
-            for (let j = 0; j < this.map[i].length; j++) {
-                if (!this.mapWalls[i][j].isWall) {
+        for (let i = 0; i < this.physicalMap.length; i++) {
+            for (let j = 0; j < this.physicalMap[i].length; j++) {
+                if (!this.physicalMap[i][j].isWall) {
                     let dangerValue = this.mapDangerValues[i][j];
                     let color = this.getColorFromDangerValue(dangerValue, maxDangerValue);
-                    this.mapWalls[i][j].body.tint = color;
+                    this.physicalMap[i][j].body.tint = color;
                 }
             }
         }
     }
 
     loadMapFromFile(fileContent) {
-        this.map = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
-        return map;
+        let loadedMap = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
+        return loadedMap;
     }
 
-    updateMapWalls(map, mapWalls) {
-        for (let i = 0; i < map.length; i++) {
-            for (let j = 0; j < map[i].length; j++) {
-                let isWall = map[i][j] === 1;
-                if (mapWalls[i] && mapWalls[i][j]) {
-                    mapWalls[i][j].setWall(isWall); // Assuming you have a method setWall to update the cell
+    async loadMapFromPath(filePath) {
+        try {
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            const fileContent = await response.text();
+            let loadedMap = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
+            return loadedMap;
+        } catch (error) {
+            console.error("Error loading file: ", error);
+            return null;
+        }
+    }
+
+    updateMap(inputMap) {
+        for (let i = 0; i < inputMap.length; i++) {
+            for (let j = 0; j < inputMap[i].length; j++) {
+                let isWall = inputMap[i][j] === 1;
+                if (this.physicalMap[i] && this.physicalMap[i][j]) {
+                    this.physicalMap[i][j].setWall(isWall); // Assuming you have a method setWall to update the cell
                 }
             }
         }
+        this.grey.setPathfinder(this.physicalMap);
     }
 
     gameLoop(delta) {
         this.updateGridDangerValues(this.allBullets, this.player, 0.3, 1.2, 10);
         this.updateGridColors(0.5);
 
-        this.player.update(delta, this.mapWalls);
+        this.player.update(delta, this.physicalMap, this.mouseX, this.mouseY);
 
         // Updating all tank bullets
         for (let t = 0; t < this.tanks.length; t++) {
@@ -211,7 +255,7 @@ export class Game {
 
             // Bullets shot by the player are handled differently
             if (tank != this.player) {
-                let firedBullet = tank.update(delta, this.map, this.player, this.mapWalls)
+                let firedBullet = tank.update(delta, this.map, this.player, this.physicalMap)
                 if (firedBullet) {
                     this.app.stage.addChild(firedBullet.body);
                     this.allBullets.push(firedBullet)
@@ -230,7 +274,7 @@ export class Game {
                 bullet.owner.firedBullet -= 1
                 this.allBullets.splice(i, 1)
             } else {
-                bullet.update(delta, this.mapWalls);
+                bullet.update(delta, this.physicalMap);
 
                 if (bullet.toDestroy) {
                     this.app.stage.removeChild(bullet.body);
@@ -242,6 +286,7 @@ export class Game {
     }
 
     cleanup() {
+        // TODO: Maybe implement removal of event listeners in the future, but it works as of now so maybe it's not needed
         this.app.ticker.stop();
         this.app.stage.removeChildren();
         document.getElementById('gameContainer').removeChild(this.app.view);

@@ -1,6 +1,6 @@
-// Brown tanks are stationary
-
 import { Bullet } from "../BulletTypes/Bullet.js";
+import { AStarPathfinder } from "../AStarPathfinder.js";
+import { Node } from "../Node.js";
 export class GreyTank {
 
     constructor(x, y, width, height, speed) {
@@ -12,6 +12,10 @@ export class GreyTank {
 
         this.speed = speed;
         this.firedBullets = 0;
+
+        this.shootingCooldown = 0;
+        // This is based on delta... im not sure what unit this is in ngl but it feels right so
+        this.cooldownPeriod = 5;
 
         this.maxBullets = 3;
         this.previousShotTime = Date.now();
@@ -27,6 +31,11 @@ export class GreyTank {
         this.turret.y = this.body.height / 2 - this.turret.height / 2; // Center of the tank's height
 
         this.body.addChild(this.turret);
+    }
+
+    setPathfinder(physicalMap) {
+        this.physicalMap = physicalMap;
+        this.pathfinder = new AStarPathfinder(physicalMap);
     }
 
     setPosition(x, y) {
@@ -89,6 +98,7 @@ export class GreyTank {
             bullet.fire(angle)
 
             this.firedBullets += 1;
+            this.shootingCooldown = this.cooldownPeriod;
             return bullet;
         }
         return null;
@@ -130,47 +140,72 @@ export class GreyTank {
         let cellHeight = 20;
         let cellWidth = 20;
 
-        this.rotateTurret(player.body.x + player.body.width / 2, player.body.y + player.body.height / 2);
-        if (Date.now() - this.previousShotTime > this.shotDelay) {
-            this.previousShotTime = Date.now();
-            res = this.fireBullet();
-        }
-
-        // Find the current cell of the AI tank
-        let currentCell = {
-            row: Math.floor(this.body.y / cellHeight),
-            col: Math.floor(this.body.x / cellWidth)
-        };
-
-        // Check if the target is reached or no longer safe
-        if (!this.targetDestination ||
-            this.targetDestination.row === currentCell.row && this.targetDestination.col === currentCell.col) {
-            this.targetDestination = this.findSafeDestination(map, currentCell, 7);
-        }
-
         if (this.targetDestination) {
+            mapWalls[this.targetDestination.row][this.targetDestination.col].body.tint = 0x0000FF;
+        }
 
-            mapWalls[currentCell.row][currentCell.col].body.tint = 0x00FF00
-            mapWalls[this.targetDestination.row][this.targetDestination.col].body.tint = 0x0000FF
-            let destinationX = this.targetDestination.col * cellWidth;
-            let destinationY = this.targetDestination.row * cellHeight;
+        if (this.path) {
+            for (let i = 0; i < this.path.length; i++) {
+                this.path[i].body.tint = 0xFF00FF;
+            }
+        }
 
-            // Calculate the direction to the destination
-            let directionX = destinationX - this.body.x + this.body.width;
-            let directionY = destinationY - this.body.y + this.body.height;
+        if (this.shootingCooldown > 0) {
+            this.shootingCooldown -= delta;
+        }
 
-            // Normalize the direction
-            let magnitude = Math.sqrt(directionX * directionX + directionY * directionY);
-            if (magnitude > 0) {
-                directionX /= magnitude;
-                directionY /= magnitude;
+        // Only allow movement after cooldown
+        if (this.shootingCooldown <= 0) {
+
+            // Find the current cell of the AI tank
+            let currentCell = {
+                row: Math.floor(this.body.y / cellHeight),
+                col: Math.floor(this.body.x / cellWidth)
+            };
+
+            // Color code the current cell for visualization
+            mapWalls[currentCell.row][currentCell.col].body.tint = 0x00FF00;
+
+            // Rotate the turret towards the player
+            this.rotateTurret(player.body.x + player.body.width / 2, player.body.y + player.body.height / 2);
+
+            // Fire a bullet if possible
+            if (Date.now() - this.previousShotTime > this.shotDelay) {
+                this.previousShotTime = Date.now();
+                res = this.fireBullet();
             }
 
-            // Move the tank
-            this.body.x += directionX * this.speed * delta;
-            this.body.y += directionY * this.speed * delta;
-        }
+            // Determine if a new target destination is needed
+            if (!this.targetDestination ||
+                (this.targetDestination.row === currentCell.row && this.targetDestination.col === currentCell.col)) {
+                this.targetDestination = this.findSafeDestination(map, currentCell, 7);
 
-        return res;
+                this.path = this.pathfinder.findPath({ x: currentCell.col, y: currentCell.row }, 
+                    { x: this.targetDestination.col, y: this.targetDestination.row });
+            }
+
+            // Move towards the target destination
+            if (this.targetDestination) {
+                let destinationX = this.targetDestination.col * cellWidth + cellWidth / 2;
+                let destinationY = this.targetDestination.row * cellHeight + cellHeight / 2;
+
+                // Calculate the direction to the destination
+                let directionX = destinationX - this.body.x;
+                let directionY = destinationY - this.body.y;
+
+                // Normalize the direction
+                let magnitude = Math.sqrt(directionX * directionX + directionY * directionY);
+                if (magnitude > 0) {
+                    directionX /= magnitude;
+                    directionY /= magnitude;
+                }
+
+                // Move the tank towards the center of the target cell
+                this.body.x += directionX * this.speed * delta;
+                this.body.y += directionY * this.speed * delta;
+            }
+
+            return res;
+        }
     }
 }

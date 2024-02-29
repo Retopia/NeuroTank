@@ -9,6 +9,9 @@ export class Player {
         this.setPosition(x, y);
         this.setSize(width, height);
 
+        this.shootingCooldown = 0;
+        // This is based on delta... im not sure what unit this is in ngl but it feels right so
+        this.cooldownPeriod = 5;
 
         this.speed = speed;
         this.keyState = {};
@@ -26,6 +29,8 @@ export class Player {
         this.body.addChild(this.turret);
 
         this.setupKeyboard();
+
+        this.body.pivot.set(this.body.width / 2, this.body.height / 2);
     }
 
     rotateTurret(mouseX, mouseY) {
@@ -36,7 +41,7 @@ export class Player {
         const dy = mouseY - turretBaseWorldY;
         const angle = Math.atan2(dy, dx);
 
-        this.turret.rotation = angle;
+        this.turret.rotation = angle - this.body.rotation;
     }
 
     setPosition(x, y) {
@@ -101,51 +106,77 @@ export class Player {
             bullet.fire(angle)
 
             this.firedBullets += 1
+            this.shootingCooldown = this.cooldownPeriod;
             return bullet;
         }
         return null;
     }
 
-    update(delta, walls) { // Add walls as a parameter
-        let dx = 0;
-        let dy = 0;
-
-        if (this.keyState['w']) dy -= 1;
-        if (this.keyState['s']) dy += 1;
-        if (this.keyState['a']) dx -= 1;
-        if (this.keyState['d']) dx += 1;
-
-        // Normalize diagonal speed
-        if (dx !== 0 && dy !== 0) {
-            dx *= Math.SQRT1_2; // 1/sqrt(2)
-            dy *= Math.SQRT1_2;
+    update(delta, walls, mouseX, mouseY) {
+        if (this.shootingCooldown > 0) {
+            this.shootingCooldown -= delta;
         }
 
-        // Proposed new position
-        let newX = this.body.x + dx * this.speed * delta;
-        let newY = this.body.y + dy * this.speed * delta;
+        // Only allow movement after cooldown
+        // This is to achieve the pausing effect like in Wii Tanks
+        if (this.shootingCooldown <= 0) {
+            let dx = 0;
+            let dy = 0;
 
-        // Collision check
-        let collisionOccurred = false;
-        for (let i = 0; i < walls.length; i++) {
-            for (let j = 0; j < walls[i].length; j++) {
-                let wall = walls[i][j]
-                if (wall.isWall) {
-                    const collision = this.rectanglesCollide({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
-                    if (collision.collided) {
-                        this.resolveCollision(this.body, wall.body, collision);
-                        collisionOccurred = true;
-                        break; // Resolve one collision at a time
+            if (this.keyState['w']) dy -= 1;
+            if (this.keyState['s']) dy += 1;
+            if (this.keyState['a']) dx -= 1;
+            if (this.keyState['d']) dx += 1;
+
+            // Normalize diagonal speed
+            if (dx !== 0 && dy !== 0) {
+                dx *= Math.SQRT1_2; // 1/sqrt(2)
+                dy *= Math.SQRT1_2;
+            }
+
+            // Proposed new position
+            let newX = this.body.x + dx * this.speed * delta;
+            let newY = this.body.y + dy * this.speed * delta;
+
+            // Collision check
+            let collisionOccurred = false;
+            for (let i = 0; i < walls.length; i++) {
+                for (let j = 0; j < walls[i].length; j++) {
+                    let wall = walls[i][j]
+                    if (wall.isWall) {
+                        const collision = this.rectanglesCollide({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
+                        if (collision.collided) {
+                            this.resolveCollision(this.body, wall.body, collision);
+                            collisionOccurred = true;
+                            break; // Resolve one collision at a time
+                        }
                     }
                 }
             }
-        }
 
-        if (!collisionOccurred) {
-            // Update position if no collision
-            this.body.x = newX;
-            this.body.y = newY;
+            if (!collisionOccurred) {
+                // Update position if no collision
+                this.body.x = newX;
+                this.body.y = newY;
+
+                // Only update the rotation if there is a change in direction
+                if (dx !== 0 || dy !== 0) {
+                    const targetAngle = Math.atan2(dy, dx) + Math.PI / 2;
+
+                    let angleDifference = targetAngle - this.body.rotation;
+
+                    // Make sure we rotate the shortest distance
+                    while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
+                    while (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
+
+                    const rotationSpeed = 0.2;
+
+                    const rotationAmount = angleDifference * rotationSpeed * delta;
+
+                    this.body.rotation += rotationAmount;
+                    this.rotateTurret(mouseX, mouseY);
+                }
+            }
         }
     }
-
 }
