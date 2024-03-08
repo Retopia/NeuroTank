@@ -6,6 +6,12 @@ import { GreenTank } from "./EnemyTypes/GreenTank.js";
 
 export class Game {
     constructor() {
+        this.app = new PIXI.Application({
+            width: 800,
+            height: 600,
+            backgroundColor: 0xffffff
+        });
+
         this.file = "./Maps/walls.txt"
 
         this.map = []; // All the bitmask of the entire map
@@ -19,16 +25,10 @@ export class Game {
         this.cellHeight = 20;
         this.mouseX = 0;
         this.mouseY = 0;
-        this.mapDangerValues = new Array(this.rows).fill(null).map(() => new Array(this.cols).fill(0));
-        this.player = new Player(700, 100, 15, 20, 2);
+        this.player = new Player(700, 100, 15, 20, 2, this.app);
         this.brown = new BrownTank(700, 500, 15, 20);
-        this.grey = new GreyTank(100, 500, 15, 20, 1.5);
-        this.green = new GreenTank(100, 100, 15, 20, 1.5);
-        this.app = new PIXI.Application({
-            width: 800,
-            height: 600,
-            backgroundColor: 0xffffff
-        });
+        this.grey = new GreyTank(100, 500, 15, 20, 1.25);
+        this.green = new GreenTank(100, 100, 15, 20, 1.75);
     }
 
     setup() {
@@ -163,13 +163,13 @@ export class Game {
     }
 
     updateGridDangerValues(bullets, player, bulletDangerFactor, playerDangerFactor, predictionSteps) {
-        let gridRows = this.mapDangerValues.length;
-        let gridCols = this.mapDangerValues[0].length;
+        let gridRows = this.physicalMap.length;
+        let gridCols = this.physicalMap[0].length;
 
         // Reset grid values
         for (let i = 0; i < gridRows; i++) {
             for (let j = 0; j < gridCols; j++) {
-                this.mapDangerValues[i][j] = 0;
+                this.physicalMap[i][j].dangerValue = 0
                 if (this.physicalMap.isWall) {
                     this.physicalMap[i][j].body.tint = 0xFFFFFF;
                 }
@@ -183,7 +183,7 @@ export class Game {
                 let predictedBulletCol = Math.floor((bullet.body.x + bullet.velocityX * step) / 20);
 
                 if (predictedBulletRow >= 0 && predictedBulletRow < gridRows && predictedBulletCol >= 0 && predictedBulletCol < gridCols) {
-                    this.mapDangerValues[predictedBulletRow][predictedBulletCol] += bulletDangerFactor / (step + 1); // Reduce danger value with distance
+                    this.physicalMap[predictedBulletRow][predictedBulletCol].dangerValue += bulletDangerFactor / (step + 1); // Reduce danger value with distance
                 }
             }
         });
@@ -192,18 +192,53 @@ export class Game {
         let playerRow = Math.floor(player.body.y / 20);
         let playerCol = Math.floor(player.body.x / 20);
 
-        for (let i = Math.round(Math.max(0, playerRow - playerDangerFactor)); i <= Math.round(Math.min(gridRows - 1, playerRow + playerDangerFactor)); i++) {
-            for (let j = Math.round(Math.max(0, playerCol - playerDangerFactor)); j <= Math.round(Math.min(gridCols - 1, playerCol + playerDangerFactor)); j++) {
-                this.mapDangerValues[i][j] += playerDangerFactor - Math.max(Math.abs(i - playerRow), Math.abs(j - playerCol));
+        for (let i = 0; i < gridRows; i++) {
+            for (let j = 0; j < gridCols; j++) {
+                if (!this.isWallBlocking(playerRow, playerCol, i, j)) {
+                    let distance = Math.max(Math.abs(i - playerRow), Math.abs(j - playerCol));
+                    let dangerValue = playerDangerFactor - 0.1 * distance;
+                    if (dangerValue > 0) {
+                        this.physicalMap[i][j].dangerValue += dangerValue;
+                    }
+                }
             }
         }
+    }
+
+    isWallBlocking(startRow, startCol, endRow, endCol) {
+        let dx = Math.abs(endCol - startCol);
+        let dy = Math.abs(endRow - startRow);
+        let sx = (startCol < endCol) ? 1 : -1;
+        let sy = (startRow < endRow) ? 1 : -1;
+        let err = dx - dy;
+
+        while (true) {
+            // Check if the current cell is a wall
+            if (this.physicalMap[startRow][startCol].isWall) {
+                return true; // Wall is blocking the line of sight
+            }
+
+            if (startRow === endRow && startCol === endCol) break; // Line has reached the end point
+
+            let e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                startCol += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                startRow += sy;
+            }
+        }
+
+        return false; // No wall is blocking the line of sight
     }
 
     updateGridColors(maxDangerValue) {
         for (let i = 0; i < this.physicalMap.length; i++) {
             for (let j = 0; j < this.physicalMap[i].length; j++) {
                 if (!this.physicalMap[i][j].isWall) {
-                    let dangerValue = this.mapDangerValues[i][j];
+                    let dangerValue = this.physicalMap[i][j].dangerValue
                     let color = this.getColorFromDangerValue(dangerValue, maxDangerValue);
                     this.physicalMap[i][j].body.tint = color;
                 }
@@ -244,9 +279,8 @@ export class Game {
     }
 
     gameLoop(delta) {
-        this.updateGridDangerValues(this.allBullets, this.player, 0.3, 1.2, 10);
+        this.updateGridDangerValues(this.allBullets, this.player, 1.0, 1.0, 25);
         this.updateGridColors(0.5);
-
         this.player.update(delta, this.physicalMap, this.mouseX, this.mouseY);
 
         // Updating all tank bullets
@@ -255,7 +289,7 @@ export class Game {
 
             // Bullets shot by the player are handled differently
             if (tank != this.player) {
-                let firedBullet = tank.update(delta, this.map, this.player, this.physicalMap)
+                let firedBullet = tank.update(delta, this.physicalMap, this.player, this.physicalMap)
                 if (firedBullet) {
                     this.app.stage.addChild(firedBullet.body);
                     this.allBullets.push(firedBullet)

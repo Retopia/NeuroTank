@@ -19,6 +19,10 @@ export class MapBuilder {
             height: 600,
             backgroundColor: 0xffffff
         });
+        
+        this.mode = "wall"
+        this.lineStart = null;
+        this.lineEnd = null;
     }
 
     setup() {
@@ -73,10 +77,13 @@ export class MapBuilder {
             reader.readAsText(file); // Read the file as text
         });
 
+        document.getElementById('itemSelect').addEventListener('change', (event) => {
+            let selectedValue = event.target.value;
+            this.mode = selectedValue;
+        });
+
         document.getElementById('copyMapButton').addEventListener('click', (event) => {
             let mapString = '';
-
-            console.log(this.map)
 
             for (let i = 0; i < this.map.length; i++) {
                 let rowString = this.map[i].map(cell => cell.isWall ? '1' : '0').join(' ');
@@ -101,14 +108,16 @@ export class MapBuilder {
             this.mouseX = newPosition.x;
             this.mouseY = newPosition.y;
 
-            if (this.heldDown) {
-                let xPos = Math.floor(this.mouseX / this.cellWidth);
-                let yPos = Math.floor(this.mouseY / this.cellHeight);
-
-                // Bounds checking
-                if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
-                    let wall = this.map[yPos][xPos];
-                    wall.setWall(this.isWall);
+            if (this.mode === "wall") {
+                if (this.heldDown) {
+                    let xPos = Math.floor(this.mouseX / this.cellWidth);
+                    let yPos = Math.floor(this.mouseY / this.cellHeight);
+    
+                    // Bounds checking
+                    if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
+                        let wall = this.map[yPos][xPos];
+                        wall.setWall(this.isWall);
+                    }
                 }
             }
         });
@@ -120,13 +129,24 @@ export class MapBuilder {
         this.app.renderer.plugins.interaction.on('pointerdown', (event) => {
             if (event.data.button === 0) {
                 this.heldDown = true;
-                let xPos = Math.floor(this.mouseX / this.cellWidth);
-                let yPos = Math.floor(this.mouseY / this.cellHeight);
+                if (this.mode === 'wall') {
+                    let xPos = Math.floor(this.mouseX / this.cellWidth);
+                    let yPos = Math.floor(this.mouseY / this.cellHeight);
+    
+                    if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
+                        let wall = this.map[yPos][xPos];
+                        wall.setWall(!wall.isWall);
+                        this.isWall = wall.isWall;
+                    }
+                } else if (this.mode === 'line') {
+                    const xPos = Math.round(this.mouseX / this.cellWidth) * this.cellWidth;
+                    const yPos = Math.round(this.mouseY / this.cellHeight) * this.cellHeight;
 
-                if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
-                    let wall = this.map[yPos][xPos];
-                    wall.setWall(!wall.isWall);
-                    this.isWall = wall.isWall;
+                    if (this.lineStart === null) {
+                        // Draw a point
+                    } else {
+                        // Clear both points and draw the collision line                        
+                    }
                 }
             }
         });

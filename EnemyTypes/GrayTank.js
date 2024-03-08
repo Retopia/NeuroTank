@@ -104,6 +104,30 @@ export class GreyTank {
         return null;
     }
 
+    isAdjacentToWall(map, cell) {
+        const row = Math.floor(cell.body.y / 20); // Assuming 20 is the cell height
+        const col = Math.floor(cell.body.x / 20); // Assuming 20 is the cell width
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                // Skip the cell itself
+                if (dx === 0 && dy === 0) continue;
+
+                const checkX = col + dx;
+                const checkY = row + dy;
+
+                // Check if the neighboring cell is within the map bounds
+                if (checkX >= 0 && checkX < map[0].length && checkY >= 0 && checkY < map.length) {
+                    // Check if the neighboring cell is a wall
+                    if (map[checkY][checkX].isWall) {
+                        return true; // Adjacent to a wall
+                    }
+                }
+            }
+        }
+        return false; // Not adjacent to any wall
+    }
+
     findSafeDestination(map, currentCell, maxDistance) {
         let lowestDanger = Infinity;
         let safeCells = [];
@@ -114,8 +138,9 @@ export class GreyTank {
                 let cellCol = currentCell.col + j;
 
                 // Check boundaries
-                if (cellRow >= 0 && cellRow < map.length && cellCol >= 0 && cellCol < map[0].length) {
-                    let danger = map[cellRow][cellCol];
+                if (cellRow >= 0 && cellRow < map.length && cellCol >= 0 && cellCol < map[0].length
+                    && !this.isAdjacentToWall(map, map[cellRow][cellCol]) && !map[cellRow][cellCol].isWall) {
+                    let danger = map[cellRow][cellCol].dangerValue;
                     if (danger < lowestDanger) {
                         lowestDanger = danger;
                         safeCells = [{ row: cellRow, col: cellCol }];
@@ -162,47 +187,55 @@ export class GreyTank {
                 row: Math.floor(this.body.y / cellHeight),
                 col: Math.floor(this.body.x / cellWidth)
             };
-
             // Color code the current cell for visualization
-            mapWalls[currentCell.row][currentCell.col].body.tint = 0x00FF00;
+            if (currentCell) {
+                mapWalls[currentCell.row][currentCell.col].body.tint = 0x00FF00;
+            }
 
             // Rotate the turret towards the player
             this.rotateTurret(player.body.x + player.body.width / 2, player.body.y + player.body.height / 2);
 
-            // Fire a bullet if possible
+            // Is it able to shoot
             if (Date.now() - this.previousShotTime > this.shotDelay) {
                 this.previousShotTime = Date.now();
+
+
+
                 res = this.fireBullet();
             }
 
             // Determine if a new target destination is needed
             if (!this.targetDestination ||
                 (this.targetDestination.row === currentCell.row && this.targetDestination.col === currentCell.col)) {
-                this.targetDestination = this.findSafeDestination(map, currentCell, 7);
+                this.targetDestination = this.findSafeDestination(map, currentCell, 15);
 
-                this.path = this.pathfinder.findPath({ x: currentCell.col, y: currentCell.row }, 
+                this.path = this.pathfinder.findPath({ x: currentCell.col, y: currentCell.row },
                     { x: this.targetDestination.col, y: this.targetDestination.row });
             }
 
-            // Move towards the target destination
-            if (this.targetDestination) {
-                let destinationX = this.targetDestination.col * cellWidth + cellWidth / 2;
-                let destinationY = this.targetDestination.row * cellHeight + cellHeight / 2;
+            // Move towards the next waypoint in the path
+            if (this.path && this.path.length > 0) {
+                let nextWaypoint = this.path[0]; // The next waypoint in the path
+                let waypointX = nextWaypoint.body.x + cellWidth / 2;
+                let waypointY = nextWaypoint.body.y + cellHeight / 2;
 
-                // Calculate the direction to the destination
-                let directionX = destinationX - this.body.x;
-                let directionY = destinationY - this.body.y;
+                // Calculate the direction to the waypoint
+                let directionX = waypointX - this.body.x;
+                let directionY = waypointY - this.body.y;
 
                 // Normalize the direction
                 let magnitude = Math.sqrt(directionX * directionX + directionY * directionY);
-                if (magnitude > 0) {
+                if (magnitude < 1) {
+                    // Remove the reached waypoint from the path
+                    this.path.shift();
+                } else {
                     directionX /= magnitude;
                     directionY /= magnitude;
-                }
 
-                // Move the tank towards the center of the target cell
-                this.body.x += directionX * this.speed * delta;
-                this.body.y += directionY * this.speed * delta;
+                    // Move the tank towards the center of the next waypoint
+                    this.body.x += directionX * this.speed * delta;
+                    this.body.y += directionY * this.speed * delta;
+                }
             }
 
             return res;

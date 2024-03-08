@@ -59,8 +59,23 @@ export class AStarPathfinder {
                 if (dx === 0 && dy === 0) continue;
                 const checkX = node.x + dx;
                 const checkY = node.y + dy;
+    
                 if (checkX >= 0 && checkX < this.grid[0].length && checkY >= 0 && checkY < this.grid.length) {
                     let neighbor = this.grid[checkY][checkX];
+    
+                    // Check for diagonal movement
+                    if (dx !== 0 && dy !== 0) {
+                        // For diagonal, both adjacent orthogonal cells must be non-wall
+                        let side1 = this.grid[node.y][checkX];
+                        let side2 = this.grid[checkY][node.x];
+    
+                        if (side1.cell.isWall || side2.cell.isWall || this.isAdjacentToWall(neighbor)) {
+                            continue; // Skip this neighbor as it's a corner-cutting move or adjacent to a wall
+                        }
+                    } else if (this.isAdjacentToWall(neighbor)) {
+                        continue; // Skip neighbors adjacent to walls for non-diagonal moves
+                    }
+    
                     if (!neighbor.cell.isWall) {
                         neighbors.push(neighbor);
                     }
@@ -69,7 +84,22 @@ export class AStarPathfinder {
         }
         return neighbors;
     }
-
+    
+    isAdjacentToWall(node) {
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const checkX = node.x + dx;
+                const checkY = node.y + dy;
+                if (checkX >= 0 && checkX < this.grid[0].length && checkY >= 0 && checkY < this.grid.length) {
+                    if (this.grid[checkY][checkX].cell.isWall) {
+                        return true; // Adjacent to a wall
+                    }
+                }
+            }
+        }
+        return false; // Not adjacent to any wall
+    }
+    
     heuristic(nodeA, nodeB) {
         const distX = Math.abs(nodeA.x - nodeB.x);
         const distY = Math.abs(nodeA.y - nodeB.y);

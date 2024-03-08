@@ -2,9 +2,10 @@ import { Bullet } from "./BulletTypes/Bullet.js"
 
 // player.js
 export class Player {
-    constructor(x, y, width, height, speed) {
+    constructor(x, y, width, height, speed, app) {
         this.body = PIXI.Sprite.from(PIXI.Texture.WHITE);
         this.body.tint = 0x0000dd;
+        this.app = app;
 
         this.setPosition(x, y);
         this.setSize(width, height);
@@ -31,6 +32,28 @@ export class Player {
         this.setupKeyboard();
 
         this.body.pivot.set(this.body.width / 2, this.body.height / 2);
+
+        this.corners = [];
+        // Add line segments
+        this.lineSegments = [];
+
+        const lineColor = 0xff0000; // Red color for line segments
+        const lineWidth = 2;
+
+        // Create 4 lines for each edge of the rectangle
+        for (let i = 0; i < 4; i++) {
+            let line = new PIXI.Graphics();
+            line.lineStyle(lineWidth, lineColor);
+            this.lineSegments.push(line);
+            this.app.stage.addChild(line);
+        }
+    }
+
+    bringToFront(container, child) {
+        if (container.children.includes(child)) {
+            container.removeChild(child);
+            container.addChild(child); // This adds the child to the end of the children array
+        }
     }
 
     rotateTurret(mouseX, mouseY) {
@@ -67,32 +90,6 @@ export class Player {
         this.keyState[event.key] = false;
     }
 
-    rectanglesCollide(rect1, rect2) {
-        if (rect1.x < rect2.x + rect2.width &&
-            rect1.x + rect1.width > rect2.x &&
-            rect1.y < rect2.y + rect2.height &&
-            rect1.y + rect1.height > rect2.y) {
-
-            return {
-                collided: true,
-                dx: (rect1.x + rect1.width / 2) - (rect2.x + rect2.width / 2),
-                dy: (rect1.y + rect1.height / 2) - (rect2.y + rect2.height / 2)
-            };
-        }
-        return { collided: false };
-    }
-
-    resolveCollision(playerRect, wallRect, collision) {
-        const overlapX = (playerRect.width / 2 + wallRect.width / 2) - Math.abs(collision.dx);
-        const overlapY = (playerRect.height / 2 + wallRect.height / 2) - Math.abs(collision.dy);
-
-        if (overlapX < overlapY) {
-            playerRect.x += collision.dx > 0 ? overlapX : -overlapX;
-        } else {
-            playerRect.y += collision.dy > 0 ? overlapY : -overlapY;
-        }
-    }
-
     fireBullet() {
         // Limit the amount of bullets that tanks can fire
         if (this.firedBullets < this.maxBullets) {
@@ -112,7 +109,78 @@ export class Player {
         return null;
     }
 
+    updateLinePositions(newX, newY) {
+        const hw = this.body.width / 2;
+        const hh = this.body.height / 2;
+        const cos = Math.cos(this.body.rotation);
+        const sin = Math.sin(this.body.rotation);
+        const points = [
+            new PIXI.Point(-hw, -hh), // Top-left
+            new PIXI.Point(hw, -hh),  // Top-right
+            new PIXI.Point(hw, hh),   // Bottom-right
+            new PIXI.Point(-hw, hh)   // Bottom-left
+        ];
+        // Calculate the position of the player's center
+        const centerX = newX;
+        const centerY = newY;
+
+        for (let i = 0; i < 4; i++) {
+            let line = this.lineSegments[i];
+            line.clear();
+            line.lineStyle(1, 0xff0000);
+
+            // Calculate and round the coordinates for start and end points
+            const rotatedStartX = Math.round(centerX + (points[i].x * cos - points[i].y * sin));
+            const rotatedStartY = Math.round(centerY + (points[i].x * sin + points[i].y * cos));
+            const rotatedEndX = Math.round(centerX + (points[(i + 1) % 4].x * cos - points[(i + 1) % 4].y * sin));
+            const rotatedEndY = Math.round(centerY + (points[(i + 1) % 4].x * sin + points[(i + 1) % 4].y * cos));
+
+            line.moveTo(rotatedStartX, rotatedStartY);
+            line.lineTo(rotatedEndX, rotatedEndY);
+        }
+    }
+
+    checkCollisionsWithWalls(wall) {
+        let collision = { occurred: false, dx: 0, dy: 0 };
+        const collisionColor = 0x00ff00; // Green color to indicate collision
+        const defaultColor = 0xff0000; // Red color for no collision
+
+        for (let i = 0; i < this.lineSegments.length; i++) {
+            let line = this.lineSegments[i];
+            let startPoint = new PIXI.Point(line.currentPath.points[0], line.currentPath.points[1]);
+            let endPoint = new PIXI.Point(line.currentPath.points[2], line.currentPath.points[3]);
+
+            if (this.isPointInRect(startPoint, wall.body) || this.isPointInRect(endPoint, wall.body)) {
+                collision.occurred = true;
+                // wall.body.tint = collisionColor;
+
+                // TODO implement 
+            }
+
+            line.clear();
+            line.lineStyle(2, collision.occurred ? collisionColor : defaultColor);
+            line.moveTo(startPoint.x, startPoint.y);
+            line.lineTo(endPoint.x, endPoint.y);
+        }
+
+        return collision;
+    }
+
+    isPointInRect(point, rect) {
+        // Check if a point is inside a rectangle
+        return point.x >= rect.x && point.x <= rect.x + rect.width &&
+            point.y >= rect.y && point.y <= rect.y + rect.height;
+    }
+
     update(delta, walls, mouseX, mouseY) {
+        this.prevX = this.body.x
+        this.prevY = this.body.y
+        this.lineSegments.forEach(line => {
+            this.bringToFront(this.app.stage, line);
+        });
+
+        this.rotateTurret(mouseX, mouseY);
+
         if (this.shootingCooldown > 0) {
             this.shootingCooldown -= delta;
         }
@@ -138,44 +206,41 @@ export class Player {
             let newX = this.body.x + dx * this.speed * delta;
             let newY = this.body.y + dy * this.speed * delta;
 
+            this.updateLinePositions(newX, newY);
+
             // Collision check
             let collisionOccurred = false;
-            for (let i = 0; i < walls.length; i++) {
-                for (let j = 0; j < walls[i].length; j++) {
-                    let wall = walls[i][j]
-                    if (wall.isWall) {
-                        const collision = this.rectanglesCollide({ x: newX, y: newY, width: this.body.width, height: this.body.height }, wall.body);
-                        if (collision.collided) {
-                            this.resolveCollision(this.body, wall.body, collision);
-                            collisionOccurred = true;
-                            break; // Resolve one collision at a time
-                        }
+            for (let wall of walls.flat()) {
+                if (wall.isWall) {
+                    if (this.checkCollisionsWithWalls(wall).occurred) {
+                        console.log("hi")
+                        collisionOccurred = true;
+                        break;
                     }
                 }
             }
 
             if (!collisionOccurred) {
-                // Update position if no collision
+                // If no collision, new position is confirmed
                 this.body.x = newX;
                 this.body.y = newY;
 
                 // Only update the rotation if there is a change in direction
-                if (dx !== 0 || dy !== 0) {
-                    const targetAngle = Math.atan2(dy, dx) + Math.PI / 2;
+                // if (dx !== 0 || dy !== 0) {
+                //     const targetAngle = Math.atan2(dy, dx) + Math.PI / 2;
 
-                    let angleDifference = targetAngle - this.body.rotation;
+                //     let angleDifference = targetAngle - this.body.rotation;
 
-                    // Make sure we rotate the shortest distance
-                    while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
-                    while (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
+                //     // Make sure we rotate the shortest distance
+                //     while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
+                //     while (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
 
-                    const rotationSpeed = 0.2;
+                //     const rotationSpeed = 0.2;
 
-                    const rotationAmount = angleDifference * rotationSpeed * delta;
+                //     const rotationAmount = angleDifference * rotationSpeed * delta;
 
-                    this.body.rotation += rotationAmount;
-                    this.rotateTurret(mouseX, mouseY);
-                }
+                //     this.body.rotation += rotationAmount;
+                // }
             }
         }
     }
