@@ -1,7 +1,7 @@
 import { Game } from './Game.js';
 import { MapBuilder } from './MapBuilder.js';
 
-let currentScene = 'map'; // Also used to set the initial scene (map/game)
+let currentScene = 'game'; // Also used to set the initial scene (map/game)
 let mapBuilder = null;
 let game = null;
 const switchSceneButton = document.getElementById('switchSceneButton');

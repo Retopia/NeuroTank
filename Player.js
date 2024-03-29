@@ -45,7 +45,6 @@ export class Player {
             let line = new PIXI.Graphics();
             line.lineStyle(lineWidth, lineColor);
             this.lineSegments.push(line);
-            this.app.stage.addChild(line);
         }
     }
 
@@ -93,11 +92,11 @@ export class Player {
     fireBullet() {
         // Limit the amount of bullets that tanks can fire
         if (this.firedBullets < this.maxBullets) {
-            const angle = this.body.rotation + this.turret.rotation; // Combined rotation
+            const angle = this.turret.rotation;
 
             // Calculate the starting position at the tip of the turret
-            const startX = this.body.x + this.turret.x + Math.cos(angle) * 30;
-            const startY = this.body.y + this.turret.y + Math.sin(angle) * 30;
+            const startX = this.body.x + Math.cos(angle) * 25;
+            const startY = this.body.y + Math.sin(angle) * 25;
 
             const bullet = new Bullet(this, startX, startY);
             bullet.fire(angle)
@@ -140,44 +139,51 @@ export class Player {
         }
     }
 
-    checkCollisionsWithWalls(wall) {
+    checkCollisionsWithWalls(collisionLine) {
         let collision = { occurred: false, dx: 0, dy: 0 };
-        const collisionColor = 0x00ff00; // Green color to indicate collision
-        const defaultColor = 0xff0000; // Red color for no collision
 
         for (let i = 0; i < this.lineSegments.length; i++) {
             let line = this.lineSegments[i];
-            let startPoint = new PIXI.Point(line.currentPath.points[0], line.currentPath.points[1]);
-            let endPoint = new PIXI.Point(line.currentPath.points[2], line.currentPath.points[3]);
+            let lineStart = new PIXI.Point(line.currentPath.points[0], line.currentPath.points[1]);
+            let lineEnd = new PIXI.Point(line.currentPath.points[2], line.currentPath.points[3]);
 
-            if (this.isPointInRect(startPoint, wall.body) || this.isPointInRect(endPoint, wall.body)) {
+            let collisionLineStart = new PIXI.Point(collisionLine[0], collisionLine[1]);
+            let collisionLineEnd = new PIXI.Point(collisionLine[2], collisionLine[3]);
+
+            if (this.doLinesIntersect(lineStart, lineEnd, collisionLineStart, collisionLineEnd)) {
                 collision.occurred = true;
-                // wall.body.tint = collisionColor;
-
-                // TODO implement 
             }
 
             line.clear();
-            line.lineStyle(2, collision.occurred ? collisionColor : defaultColor);
-            line.moveTo(startPoint.x, startPoint.y);
-            line.lineTo(endPoint.x, endPoint.y);
+            line.moveTo(lineStart.x, lineStart.y);
+            line.lineTo(lineEnd.x, lineEnd.y);
         }
 
         return collision;
     }
 
-    isPointInRect(point, rect) {
-        // Check if a point is inside a rectangle
-        return point.x >= rect.x && point.x <= rect.x + rect.width &&
-            point.y >= rect.y && point.y <= rect.y + rect.height;
+    doLinesIntersect(aStart, aEnd, bStart, bEnd) {
+        // Calculate the vectors from the start to the end points
+        let d1x = aEnd.x - aStart.x;
+        let d1y = aEnd.y - aStart.y;
+        let d2x = bEnd.x - bStart.x;
+        let d2y = bEnd.y - bStart.y;
+
+        // Cross product to determine if parallel
+        let cross = d1x * d2y - d1y * d2x;
+        if (Math.abs(cross) < 1e-8) return false; // Lines are parallel
+
+        // Calculate the intersection t value
+        let t = ((bStart.x - aStart.x) * d2y - (bStart.y - aStart.y) * d2x) / cross;
+        let u = ((bStart.x - aStart.x) * d1y - (bStart.y - aStart.y) * d1x) / cross;
+
+        // Check if the scalar parameters are within bounds (0 to 1)
+        return t >= 0 && t <= 1 && u >= 0 && u <= 1;
     }
 
-    update(delta, walls, mouseX, mouseY) {
+    update(delta, collisionLines, mouseX, mouseY) {
         this.prevX = this.body.x
         this.prevY = this.body.y
-        this.lineSegments.forEach(line => {
-            this.bringToFront(this.app.stage, line);
-        });
 
         this.rotateTurret(mouseX, mouseY);
 
@@ -210,13 +216,10 @@ export class Player {
 
             // Collision check
             let collisionOccurred = false;
-            for (let wall of walls.flat()) {
-                if (wall.isWall) {
-                    if (this.checkCollisionsWithWalls(wall).occurred) {
-                        console.log("hi")
-                        collisionOccurred = true;
-                        break;
-                    }
+            for (let i = 0; i < collisionLines.length; i++) {
+                if (this.checkCollisionsWithWalls(collisionLines[i]).occurred) {
+                    collisionOccurred = true;
+                    break;
                 }
             }
 
@@ -224,23 +227,6 @@ export class Player {
                 // If no collision, new position is confirmed
                 this.body.x = newX;
                 this.body.y = newY;
-
-                // Only update the rotation if there is a change in direction
-                // if (dx !== 0 || dy !== 0) {
-                //     const targetAngle = Math.atan2(dy, dx) + Math.PI / 2;
-
-                //     let angleDifference = targetAngle - this.body.rotation;
-
-                //     // Make sure we rotate the shortest distance
-                //     while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
-                //     while (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
-
-                //     const rotationSpeed = 0.2;
-
-                //     const rotationAmount = angleDifference * rotationSpeed * delta;
-
-                //     this.body.rotation += rotationAmount;
-                // }
             }
         }
     }

@@ -12,12 +12,12 @@ export class Game {
             backgroundColor: 0xffffff
         });
 
-        this.file = "./Maps/walls.txt"
+        this.file = "./Maps/level2.txt"
 
-        this.map = []; // All the bitmask of the entire map
         this.physicalMap = []; // All the physical walls
         this.tanks = [];
         this.allBullets = [];
+        this.collisionLines = []; // For handling all collisions
         this.enableGridLines = true;
         this.rows = 30;
         this.cols = 40;
@@ -25,61 +25,39 @@ export class Game {
         this.cellHeight = 20;
         this.mouseX = 0;
         this.mouseY = 0;
-        this.player = new Player(700, 100, 15, 20, 2, this.app);
-        this.brown = new BrownTank(700, 500, 15, 20);
-        this.grey = new GreyTank(100, 500, 15, 20, 1.25);
-        this.green = new GreenTank(100, 100, 15, 20, 1.75);
+        this.player = new Player(700, 100, 18, 18, 2, this.app);
     }
 
     setup() {
         document.getElementById('gameContainer').appendChild(this.app.view);
 
-        // Default map generation
-        for (let i = 0; i < this.rows; i++) {
-            let tempInts = [];
-            let tempWalls = [];
-            for (let j = 0; j < this.cols; j++) {
-                let isWall = false;
-                if (i == 0 || i == this.rows - 1 || j == 0 || j == this.cols - 1) {
-                    tempInts.push(1);
-                    isWall = true;
-                } else {
-                    tempInts.push(0);
-                }
-                let wall = new Cell(j * this.cellWidth, i * this.cellHeight, this.cellWidth, this.cellHeight, -1, isWall);
-                tempWalls.push(wall);
-                this.app.stage.addChild(wall.body);
-            }
-            this.map.push(tempInts);
-            this.physicalMap.push(tempWalls);
-        }
-
         if (this.file != null) {
-            this.loadMapFromPath(this.file).then(loadedMap => {
-                if (loadedMap) {
-                    this.updateMap(loadedMap);
+            this.loadMapFromPath(this.file).then(loadedData => {
+                if (loadedData) {
+                    this.initGame(loadedData);
                 }
             });
         }
 
-        this.grey.setPathfinder(this.physicalMap);
-
-        if (this.enableGridLines) {
-            let gridLines = new PIXI.Graphics();
-            gridLines.lineStyle(1, 0xcccccc, 1);
-            for (let i = 0; i <= this.rows; i++) {
-                gridLines.moveTo(0, i * this.cellHeight);
-                gridLines.lineTo(this.cols * this.cellWidth, i * this.cellHeight);
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
             }
-            for (let j = 0; j <= this.cols; j++) {
-                gridLines.moveTo(j * this.cellWidth, 0);
-                gridLines.lineTo(j * this.cellWidth, this.rows * this.cellHeight);
-            }
-            this.app.stage.addChild(gridLines);
-        }
 
-        this.app.stage.addChild(this.player.body, this.grey.body);
-        this.tanks.push(this.player, this.grey);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const fileContent = e.target.result;
+                let loadedMap = this.loadMapFromFile(fileContent);
+                this.updateMap(loadedMap);
+            };
+
+            reader.readAsText(file);
+        });
+    }
+
+    initGame(loadedData) {
+        this.updateMap(loadedData);
 
         this.app.ticker.add((delta) => this.gameLoop(delta));
 
@@ -102,22 +80,23 @@ export class Game {
                 }
             }
         });
+    }
 
-        document.getElementById('fileInput').addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) {
-                return;
+    addGridlines() {
+        // Adds gridlines, purely aesthetics
+        if (this.enableGridLines) {
+            let gridLines = new PIXI.Graphics();
+            gridLines.lineStyle(1, 0xcccccc, 1);
+            for (let i = 0; i <= this.rows; i++) {
+                gridLines.moveTo(0, i * this.cellHeight);
+                gridLines.lineTo(this.cols * this.cellWidth, i * this.cellHeight);
             }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const fileContent = e.target.result;
-                let loadedMap = this.loadMapFromFile(fileContent);
-                this.updateMap(loadedMap);
-            };
-
-            reader.readAsText(file);
-        });
+            for (let j = 0; j <= this.cols; j++) {
+                gridLines.moveTo(j * this.cellWidth, 0);
+                gridLines.lineTo(j * this.cellWidth, this.rows * this.cellHeight);
+            }
+            this.app.stage.addChild(gridLines);
+        }
     }
 
     rectanglesCollide(rect1, rect2) {
@@ -246,9 +225,36 @@ export class Game {
         }
     }
 
+    // loadMapFromFile(fileContent) {
+    //     let loadedMap = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
+    //     return loadedMap;
+    // }
+
     loadMapFromFile(fileContent) {
-        let loadedMap = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
-        return loadedMap;
+        // Normalize newlines (convert all to Unix-style)
+        fileContent = fileContent.replace(/\r\n/g, '\n');
+
+        // Split the file content into wall data and collision line data
+        const sections = fileContent.trim().split('\n\n');
+
+        let wallData = sections[0];
+        let lineData = sections.length > 1 ? sections[1] : '';
+
+        // Process wall data
+        let loadedMap = wallData.split('\n').map(row => row.trim().split(' ').map(Number));
+
+        // Process collision line data
+        let loadedLines = [];
+        if (lineData) {
+            lineData.split('\n').forEach(line => {
+                let coords = line.split(' ').map(Number);
+                if (coords.length === 4) { // Ensure the line has exactly four coordinates
+                    loadedLines.push(coords);
+                }
+            });
+        }
+
+        return { map: loadedMap, lines: loadedLines };
     }
 
     async loadMapFromPath(filePath) {
@@ -257,42 +263,140 @@ export class Game {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
-            const fileContent = await response.text();
-            let loadedMap = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
-            return loadedMap;
+            let fileContent = await response.text();
+            // Normalize newlines (convert all to Unix-style)
+            fileContent = fileContent.replace(/\r\n/g, '\n');
+
+            // Split the file content into wall data and collision line data
+            const sections = fileContent.trim().split('\n\n');
+
+            let wallData = sections[0];
+            let lineData = sections.length > 1 ? sections[1] : '';
+
+            // Process wall data
+            let loadedMap = wallData.split('\n').map(row => row.trim().split(' ').map(Number));
+
+            // Process collision line data
+            let loadedLines = [];
+            if (lineData) {
+                lineData.split('\n').forEach(line => {
+                    let coords = line.split(' ').map(Number);
+                    if (coords.length === 4) { // Ensure the line has exactly four coordinates
+                        loadedLines.push(coords);
+                    }
+                });
+            }
+
+            return { map: loadedMap, lines: loadedLines };
         } catch (error) {
             console.error("Error loading file: ", error);
             return null;
         }
     }
 
-    updateMap(inputMap) {
+    updateMap(loadedData) {
+        this.tanks = [];
+        let inputMap = loadedData.map;
+        this.physicalMap = [];
+
+        for (let i = 0; i < inputMap.length; i++) {
+            this.physicalMap[i] = [];
+            for (let j = 0; j < inputMap[i].length; j++) {
+                this.physicalMap[i][j] = new Cell(j * this.cellWidth, i * this.cellHeight, this.cellWidth, this.cellHeight, -1, false);
+                this.app.stage.addChild(this.physicalMap[i][j].body);
+            }
+        }
+
+        this.addGridlines();
+
         for (let i = 0; i < inputMap.length; i++) {
             for (let j = 0; j < inputMap[i].length; j++) {
-                let isWall = inputMap[i][j] === 1;
-                if (this.physicalMap[i] && this.physicalMap[i][j]) {
-                    this.physicalMap[i][j].setWall(isWall); // Assuming you have a method setWall to update the cell
+                let newTank = null;
+                // This is not optimal but very easy to read      
+                let currentCell = this.physicalMap[i][j];
+                if (inputMap[i][j] === 0) {
+                    currentCell.setWall(false);
+                }
+
+                if (inputMap[i][j] === 1) {
+                    currentCell.setWall(true);
+                }
+
+                if (inputMap[i][j] === 2) {
+                    currentCell.setWall(false);
+                    this.player = new Player(j * this.cellWidth, i * this.cellHeight, 18, 18, 2, this.app);
+                    newTank = new Player(j * this.cellWidth, i * this.cellHeight, 18, 18, 2, this.app);
+                    this.tanks.push(this.player)
+                    this.app.stage.addChild(this.player.body);
+                }
+
+                if (inputMap[i][j] === 3) {
+                    currentCell.setWall(false);
+                    newTank = new BrownTank(j * this.cellWidth, i * this.cellHeight, 18, 18);
+                    this.tanks.push(newTank);
+                    this.app.stage.addChild(newTank.body);
+                    // Brown tank is stationary, needs no pathfinder
+                }
+
+                if (inputMap[i][j] === 4) {
+                    currentCell.setWall(false);
+                    newTank = new GreyTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 1.25);
+                    this.tanks.push(newTank);
+                    this.app.stage.addChild(newTank.body);
+                    newTank.setPathfinder(this.physicalMap);
+                }
+
+                if (inputMap[i][j] === 5) {
+                    currentCell.setWall(false);
+                    newTank = new GreenTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 1.75);
+                    this.tanks.push(newTank);
+                    this.app.stage.addChild(newTank.body);
+                    newTank.setPathfinder(this.physicalMap);
+                }
+
+                if (inputMap[i][j] === 6) {
+                    currentCell.setWall(false);
+                    newTank = new PinkTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 2);
+                    this.tanks.push(newTank);
+                    this.app.stage.addChild(newTank.body);
+                    newTank.setPathfinder(this.physicalMap);
                 }
             }
         }
-        this.grey.setPathfinder(this.physicalMap);
-    }
 
+        // Update collision lines
+        let loadedLines = loadedData.lines;
+        this.collisionLines = [];
+        loadedLines.forEach(lineCoords => {
+            let line = new PIXI.Graphics();
+            line.lineStyle(3, 0xFF00FF)
+                .moveTo(lineCoords[0], lineCoords[1])
+                .lineTo(lineCoords[2], lineCoords[3]);
+            this.app.stage.addChild(line);
+            lineCoords.push(line)
+            this.collisionLines.push(lineCoords);
+        });
+    }
     gameLoop(delta) {
         this.updateGridDangerValues(this.allBullets, this.player, 1.0, 1.0, 25);
         this.updateGridColors(0.5);
-        this.player.update(delta, this.physicalMap, this.mouseX, this.mouseY);
+        this.player.update(delta, this.collisionLines, this.mouseX, this.mouseY);
 
         // Updating all tank bullets
         for (let t = 0; t < this.tanks.length; t++) {
             let tank = this.tanks[t];
 
             // Bullets shot by the player are handled differently
+            // Currently all AIs can only shoot 1 bullet at a time
+            // May add future tank that can shoot multiple
             if (tank != this.player) {
-                let firedBullet = tank.update(delta, this.physicalMap, this.player, this.physicalMap)
-                if (firedBullet) {
-                    this.app.stage.addChild(firedBullet.body);
-                    this.allBullets.push(firedBullet)
+                let firedBullets = tank.update(delta, this.physicalMap, this.player, this.collisionLines, this.allBullets, this.tanks)
+
+                if (firedBullets && firedBullets.length > 0) {
+                    for (let i = 0; i < firedBullets.length; i++) {
+                        this.app.stage.addChild(firedBullets[i].body);
+                        this.allBullets.push(firedBullets[i])
+                    }
                 }
             }
         }
@@ -308,7 +412,7 @@ export class Game {
                 bullet.owner.firedBullet -= 1
                 this.allBullets.splice(i, 1)
             } else {
-                bullet.update(delta, this.physicalMap);
+                bullet.update(delta, this.collisionLines, this.allBullets);
 
                 if (bullet.toDestroy) {
                     this.app.stage.removeChild(bullet.body);
