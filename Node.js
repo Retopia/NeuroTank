@@ -16,6 +16,6 @@ export class Node {
     }
 
     get isWall() {
-        return this.cell.isWall;
+        return this.cell.getCellType() === 'wall';
     }
 }

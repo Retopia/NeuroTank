@@ -8,7 +8,7 @@ export class Bullet {
         this.bounces = 0;
         this.toDestroy = false;
 
-        this.bulletSpeed = 3.25
+        this.bulletSpeed = 3.5
         this.bulletRadius = 4;
 
         // Yellow bullet

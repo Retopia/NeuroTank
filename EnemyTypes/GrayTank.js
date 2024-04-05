@@ -14,12 +14,15 @@ export class GreyTank {
         this.firedBullets = 0;
 
         this.recoilAnimationTime = 0;
-        // This is based on delta... im not sure what unit this is in ngl but it feels right so
         this.cooldownPeriod = 5;
 
+        this.wallPathChangeTime = 120;
+        this.wallPathChangeTimeAccumulator = 0;
+
         this.maxBullets = 3;
-        this.previousShotTime = Date.now();
-        this.shotDelay = Math.random() * (3000 - 800) + 800;
+
+        this.shotDelayAccumulator = 0;
+        this.shotDelay = Math.random() * (300 - 80) + 80;
 
         this.targetDestination = null;
 
@@ -32,6 +35,16 @@ export class GreyTank {
 
         this.body.addChild(this.turret);
         this.prevLine = null;
+
+        this.alive = true;
+    }
+
+    isAlive() {
+        return this.isAlive
+    }
+
+    setAlive(alive) {
+        this.alive = alive;
     }
 
     setPathfinder(physicalMap) {
@@ -98,9 +111,13 @@ export class GreyTank {
         return null;
     }
 
-    isAdjacentToWall(map, cell) {
-        const row = Math.floor(cell.body.y / 20); // Assuming 20 is the cell height
-        const col = Math.floor(cell.body.x / 20); // Assuming 20 is the cell width
+    isWallOrHole(cell) {
+        return cell.getCellType() === 'wall' || cell.getCellType() === 'hole';
+    }
+
+    isAdjacentToWallOrHole(map, cell) {
+        const row = Math.floor(Math.floor(cell.body.y) / 20); // Assuming 20 is the cell height
+        const col = Math.floor(Math.floor(cell.body.x) / 20); // Assuming 20 is the cell width
 
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
@@ -113,7 +130,7 @@ export class GreyTank {
                 // Check if the neighboring cell is within the map bounds
                 if (checkX >= 0 && checkX < map[0].length && checkY >= 0 && checkY < map.length) {
                     // Check if the neighboring cell is a wall
-                    if (map[checkY][checkX].isWall) {
+                    if (this.isWallOrHole(map[checkY][checkX])) {
                         return true; // Adjacent to a wall
                     }
                 }
@@ -133,7 +150,7 @@ export class GreyTank {
 
                 // Check boundaries
                 if (cellRow >= 0 && cellRow < map.length && cellCol >= 0 && cellCol < map[0].length
-                    && !this.isAdjacentToWall(map, map[cellRow][cellCol]) && !map[cellRow][cellCol].isWall) {
+                    && !this.isAdjacentToWallOrHole(map, map[cellRow][cellCol]) && !this.isWallOrHole(map[cellRow][cellCol])) {
                     let danger = map[cellRow][cellCol].dangerValue;
                     if (danger < lowestDanger) {
                         lowestDanger = danger;
@@ -173,7 +190,6 @@ export class GreyTank {
 
             if (this.isPathIntersectingRectangle(bulletPath, expandedHitbox)) {
                 let distance = this.distance(tankPosition, bulletPath.start);
-                console.log("intersected", distance)
                 if (distance < minDistance) {
                     minDistance = distance;
                     closestBullet = bullet;
@@ -259,7 +275,6 @@ export class GreyTank {
                             let tankBounds = tank.body.getBounds();
                             let expandedBounds = new PIXI.Rectangle(tankBounds.x - 1, tankBounds.y - 1, tankBounds.width + 2, tankBounds.height + 2)
                             if (this.isPathIntersectingRectangle({ start: tankPosition, end: aimPoint }, expandedBounds)) {
-                                console.log("bb to")
                                 isPathObstructed = true;
                                 break;
                             }
@@ -273,7 +288,6 @@ export class GreyTank {
                             let tankBounds = tank.body.getBounds();
                             let expandedBounds = new PIXI.Rectangle(tankBounds.x - 1, tankBounds.y - 1, tankBounds.width + 2, tankBounds.height + 2)
                             if (this.isPathIntersectingRectangle({ start: aimPoint, end: playerPosition }, expandedBounds)) {
-                                console.log("bb end")
                                 isPathObstructed = true;
                                 break;
                             }
@@ -382,7 +396,6 @@ export class GreyTank {
 
 
     anyLineIntersection(start, end, lines) {
-        // Check if a line segment defined by 'start' and 'end' intersects with any line in 'lines'
         for (let i = 0; i < lines.length; i++) {
             let lineStart = new PIXI.Point(lines[i][0], lines[i][1]);
             let lineEnd = new PIXI.Point(lines[i][2], lines[i][3]);
@@ -393,30 +406,81 @@ export class GreyTank {
         return false; // No intersections
     }
 
+    predictiveDodge(allBullets, delta) {
+        let dodgeDirection = { x: 0, y: 0 };
+
+        for (let bullet of allBullets) {
+            let bulletDirection = {
+                x: bullet.velocityX,
+                y: bullet.velocityY
+            };
+
+            let bulletToTank = {
+                x: this.body.x - bullet.body.x,
+                y: this.body.y - bullet.body.y
+            };
+
+            let dotProduct = bulletDirection.x * bulletToTank.x + bulletDirection.y * bulletToTank.y;
+
+            if (dotProduct > 0) {
+                let bulletFuturePosition = {
+                    x: bullet.body.x + bullet.velocityX * delta,
+                    y: bullet.body.y + bullet.velocityY * delta
+                };
+
+                let distanceThreshold = 120; // Adjust this value based on your game's scale
+
+                if (this.distance(this.body, bulletFuturePosition) < distanceThreshold) {
+                    let dodgeX = this.body.x - bulletFuturePosition.x;
+                    let dodgeY = this.body.y - bulletFuturePosition.y;
+
+                    let magnitude = Math.sqrt(dodgeX * dodgeX + dodgeY * dodgeY);
+                    if (magnitude > 0) {
+                        dodgeX /= magnitude;
+                        dodgeY /= magnitude;
+                    }
+
+                    dodgeDirection.x += dodgeX;
+                    dodgeDirection.y += dodgeY;
+                }
+            }
+        }
+
+        let magnitude = Math.sqrt(dodgeDirection.x * dodgeDirection.x + dodgeDirection.y * dodgeDirection.y);
+        if (magnitude > 0) {
+            dodgeDirection.x /= magnitude;
+            dodgeDirection.y /= magnitude;
+        }
+
+        return dodgeDirection;
+    }
+
     update(delta, mapWalls, player, collisionLines, allBullets, allTanks) {
         let res = [];
         let cellHeight = 20;
         let cellWidth = 20;
         let canShoot = false;
 
-        if (this.targetDestination) {
-            mapWalls[this.targetDestination.row][this.targetDestination.col].body.tint = 0x0000FF;
-        }
+        // if (this.targetDestination) {
+        //     mapWalls[this.targetDestination.row][this.targetDestination.col].body.tint = 0x0000FF;
+        // }
 
-        if (this.path) {
-            for (let i = 0; i < this.path.length; i++) {
-                this.path[i].body.tint = 0xFF00FF;
-            }
-        }
+        // if (this.path) {
+        //     for (let i = 0; i < this.path.length; i++) {
+        //         this.path[i].body.tint = 0xFF00FF;
+        //     }
+        // }
 
         if (this.recoilAnimationTime > 0) {
             this.recoilAnimationTime -= delta;
         }
-        if (Date.now() - this.previousShotTime > this.shotDelay) {
-            this.previousShotTime = Date.now();
+
+        this.wallPathChangeTimeAccumulator += delta;
+        this.shotDelayAccumulator += delta;
+        if (this.shotDelayAccumulator > this.shotDelay) {
             canShoot = true;
-            this.shotDelay = Math.random() * (3000 - 800) + 800;
-            // this.shotDelay = 500;
+            this.shotDelayAccumulator = 0;
+            this.shotDelay = Math.random() * (300 - 80) + 80;
         }
 
         // This section is on shooting  
@@ -454,51 +518,90 @@ export class GreyTank {
             }
         }
 
-        // This section is on movement
-        // Only allow movement after cooldown
         if (this.recoilAnimationTime <= 0) {
-            // Find the current cell of the AI tank
             let currentCell = {
                 row: Math.floor(this.body.y / cellHeight),
                 col: Math.floor(this.body.x / cellWidth)
             };
-            // Color code the current cell for visualization
-            if (currentCell) {
-                mapWalls[currentCell.row][currentCell.col].body.tint = 0x00FF00;
-            }
 
             // Determine if a new target destination is needed
             if (!this.targetDestination ||
                 (this.targetDestination.row === currentCell.row && this.targetDestination.col === currentCell.col)) {
                 this.targetDestination = this.findSafeDestination(mapWalls, currentCell, 15);
-
                 this.path = this.pathfinder.findPath({ x: currentCell.col, y: currentCell.row },
                     { x: this.targetDestination.col, y: this.targetDestination.row });
             }
 
-            // Move towards the next waypoint in the path
-            if (this.path && this.path.length > 0) {
-                let nextWaypoint = this.path[0]; // The next waypoint in the path
-                let waypointX = nextWaypoint.body.x + cellWidth / 2;
-                let waypointY = nextWaypoint.body.y + cellHeight / 2;
+            // Store the previous position before movement
+            let prevX = this.body.x;
+            let prevY = this.body.y;
 
-                // Calculate the direction to the waypoint
-                let directionX = waypointX - this.body.x;
-                let directionY = waypointY - this.body.y;
+            // Predictive Dodging
+            let bulletDodgeDirection = this.predictiveDodge(allBullets, delta);
 
-                // Normalize the direction
-                let magnitude = Math.sqrt(directionX * directionX + directionY * directionY);
-                if (magnitude < 1) {
-                    // Remove the reached waypoint from the path
-                    this.path.shift();
-                } else {
-                    directionX /= magnitude;
-                    directionY /= magnitude;
+            if (bulletDodgeDirection.x !== 0 || bulletDodgeDirection.y !== 0) {
+                // Move the tank based on the dodge direction
+                this.body.x += bulletDodgeDirection.x * this.speed * delta;
+                this.body.y += bulletDodgeDirection.y * this.speed * delta;
+            } else {
+                // Move towards the next waypoint in the path
+                if (this.path && this.path.length > 0) {
+                    let nextWaypoint = this.path[0];
+                    let waypointX = nextWaypoint.body.x + cellWidth / 2;
+                    let waypointY = nextWaypoint.body.y + cellHeight / 2;
 
-                    // Move the tank towards the center of the next waypoint
-                    this.body.x += directionX * this.speed * delta;
-                    this.body.y += directionY * this.speed * delta;
+                    let directionX = waypointX - this.body.x;
+                    let directionY = waypointY - this.body.y;
+
+                    let magnitude = Math.sqrt(directionX * directionX + directionY * directionY);
+                    if (magnitude < 1) {
+                        this.path.shift();
+                    } else {
+                        directionX /= magnitude;
+                        directionY /= magnitude;
+
+                        this.body.x += directionX * this.speed * delta;
+                        this.body.y += directionY * this.speed * delta;
+                    }
                 }
+            }
+
+            let changePath = false;
+
+            // Check for collision with walls
+            for (let i = 0; i < mapWalls.length; i++) {
+                for (let j = 0; j < mapWalls[i].length; j++) {
+                    if (this.isWallOrHole(mapWalls[i][j])) {
+                        let wallX = mapWalls[i][j].body.x;
+                        let wallY = mapWalls[i][j].body.y;
+                        let wallWidth = mapWalls[i][j].body.width;
+                        let wallHeight = mapWalls[i][j].body.height;
+
+                        if (this.body.x < wallX + wallWidth &&
+                            this.body.x + this.body.width > wallX &&
+                            this.body.y < wallY + wallHeight &&
+                            this.body.y + this.body.height > wallY) {
+                            // Collision detected, revert to the previous position
+                            this.body.x = prevX;
+                            this.body.y = prevY;
+                            changePath = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+
+            if (changePath && (this.wallPathChangeTimeAccumulator > this.wallPathChangeTime)) {
+                this.wallPathChangeTimeAccumulator = 0;
+                let currentCell = {
+                    row: Math.floor(this.body.y / cellHeight),
+                    col: Math.floor(this.body.x / cellWidth)
+                };
+
+                this.targetDestination = this.findSafeDestination(mapWalls, currentCell, 15);
+                this.path = this.pathfinder.findPath({ x: currentCell.col, y: currentCell.row },
+                    { x: this.targetDestination.col, y: this.targetDestination.row });
             }
         }
         return res;

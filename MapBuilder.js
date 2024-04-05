@@ -20,11 +20,15 @@ export class MapBuilder {
             backgroundColor: 0xffffff
         });
 
-        this.mode = "wall"
+        this.mode = "wall";
+
         this.lineStart = null;
         this.playerSpawnMarked = false;
 
-        // array of x, y, x, y, line
+        // This is for the pointermove painting
+        this.isWall = false;
+        this.isHole = false;
+
         this.collisionLines = [];
     }
 
@@ -33,35 +37,22 @@ export class MapBuilder {
         for (let i = 0; i < this.rows; i++) {
             let tempWalls = [];
             for (let j = 0; j < this.cols; j++) {
-                let isWall = false;
+                let cellType = 'path'
                 if (i == 0 || i == this.rows - 1 || j == 0 || j == this.cols - 1) {
-                    isWall = true;
+                    cellType = 'wall'
                 }
-                let wall = new Cell(j * 20, i * 20, this.cellWidth, this.cellHeight, -1, isWall);
+                let wall = new Cell(j * 20, i * 20, this.cellWidth, this.cellHeight, cellType);
                 tempWalls.push(wall);
                 this.app.stage.addChild(wall.body)
             }
             this.map.push(tempWalls);
         }
 
-        document.getElementById('gameContainer').appendChild(this.app.view);
-
-        // Represents literally every single gridline
-        this.gridLines.lineStyle(1, 0xcccccc, 1);
-
-        // horizontal lines
-        for (let i = 0; i <= this.rows; i++) {
-            this.gridLines.moveTo(0, i * this.cellHeight);
-            this.gridLines.lineTo(this.cols * this.cellWidth, i * this.cellHeight);
-        }
-
-        // vertical lines
-        for (let j = 0; j <= this.cols; j++) {
-            this.gridLines.moveTo(j * this.cellWidth, 0);
-            this.gridLines.lineTo(j * this.cellWidth, this.rows * this.cellHeight);
-        }
-
+        this.gridLines = new PIXI.Graphics();
         this.app.stage.addChild(this.gridLines);
+        this.drawGridLines();
+
+        document.getElementById('gameContainer').appendChild(this.app.view);
 
         document.getElementById('fileInput').addEventListener('change', (event) => {
             const file = event.target.files[0];
@@ -88,30 +79,33 @@ export class MapBuilder {
         document.getElementById('copyMapButton').addEventListener('click', (event) => {
             let mapString = '';
 
-            // empty = 0
+            // path = 0
             // wall = 1
-            // player = 2
-            // brown = 3
-            // grey = 4
-            // green = 5
-            // pink = 6
+            // hole = 2
+            // player = 3
+            // brown = 4
+            // grey = 5
+            // green = 6
+            // pink = 7
             for (let i = 0; i < this.map.length; i++) {
                 for (let j = 0; j < this.map[i].length; j++) {
                     let currentCell = this.map[i][j];
-                    if (currentCell.getSpawn() === 'player') {
-                        mapString += '2 ';
-                    } else if (currentCell.getSpawn() === 'brown') {
-                        mapString += '3 ';
-                    } else if (currentCell.getSpawn() === 'grey') {
-                        mapString += '4 ';
-                    } else if (currentCell.getSpawn() === 'green') {
-                        mapString += '5 ';
-                    } else if (currentCell.getSpawn() === 'pink') {
-                        mapString += '6 ';
-                    } else if (currentCell.isWall) {
-                        mapString += '1 ';
-                    } else {
+                    if (currentCell.getCellType() === 'path') {
                         mapString += '0 ';
+                    } else if (currentCell.getCellType() === 'wall') {
+                        mapString += '1 ';
+                    } else if (currentCell.getCellType() === 'hole') {
+                        mapString += '2 ';
+                    } else if (currentCell.getCellType() === 'player') {
+                        mapString += '3 ';
+                    } else if (currentCell.getCellType() === 'brown') {
+                        mapString += '4 ';
+                    } else if (currentCell.getCellType() === 'grey') {
+                        mapString += '5 ';
+                    } else if (currentCell.getCellType() === 'green') {
+                        mapString += '6 ';
+                    } else if (currentCell.getCellType() === 'pink') {
+                        mapString += '7 ';
                     }
                 }
                 mapString = mapString.trimEnd() + '\n';
@@ -144,8 +138,35 @@ export class MapBuilder {
 
                     // Bounds checking
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
-                        let wall = this.map[yPos][xPos];
-                        wall.setWall(this.isWall);
+                        let cell = this.map[yPos][xPos];
+                        this.app.stage.removeChild(cell.body);
+                        if (this.isWall) {
+                            cell.setCellType('wall');
+                        } else {
+                            cell.setCellType('path');
+                        }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
+                    }
+                }
+            }
+
+            if (this.mode === "hole") {
+                if (this.heldDownLeft) {
+                    let xPos = Math.floor(this.mouseX / this.cellWidth);
+                    let yPos = Math.floor(this.mouseY / this.cellHeight);
+
+                    // Bounds checking
+                    if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
+                        let cell = this.map[yPos][xPos];
+                        this.app.stage.removeChild(cell.body);
+                        if (this.isHole) {
+                            cell.setCellType('hole');
+                        } else {
+                            cell.setCellType('path');
+                        }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
             }
@@ -179,7 +200,6 @@ export class MapBuilder {
         });
 
         this.app.renderer.plugins.interaction.on('pointerdown', (event) => {
-
             if (event.data.button === 2) {
                 this.heldDownRight = true;
                 if (this.mode === 'line') {
@@ -209,9 +229,33 @@ export class MapBuilder {
 
                 if (this.mode === 'wall') {
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
-                        let wall = this.map[yPos][xPos];
-                        wall.setWall(!wall.isWall);
-                        this.isWall = wall.isWall;
+                        let cell = this.map[yPos][xPos];
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'path') {
+                            cell.setCellType('wall');
+                            this.isWall = true;
+                        } else {
+                            cell.setCellType('path');
+                            this.isWall = false;
+                        }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
+                    }
+                }
+
+                if (this.mode === 'hole') {
+                    if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
+                        let cell = this.map[yPos][xPos];
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'path') {
+                            cell.setCellType('hole');
+                            this.isHole = true;
+                        } else {
+                            cell.setCellType('path');
+                            this.isHole = false;
+                        }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
 
@@ -256,57 +300,72 @@ export class MapBuilder {
                 if (this.mode === 'playerSpawn') {
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
                         let cell = this.map[yPos][xPos];
-                        if (cell.getSpawn() === 'player') {
-                            cell.clearSpawn();
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'player') {
+                            cell.clearCellType();
                             this.playerSpawnMarked = false;
                         } else if (this.playerSpawnMarked === false) {
-                            cell.setSpawn('player')
+                            cell.setCellType('player');
                             this.playerSpawnMarked = true;
                         }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
 
                 if (this.mode === 'brownTankSpawn') {
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
                         let cell = this.map[yPos][xPos];
-                        if (cell.getSpawn() === 'brown') {
-                            cell.clearSpawn();
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'brown') {
+                            cell.clearCellType();
                         } else {
-                            cell.setSpawn('brown')
+                            cell.setCellType('brown');
                         }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
 
                 if (this.mode === 'greyTankSpawn') {
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
                         let cell = this.map[yPos][xPos];
-                        if (cell.getSpawn() === 'grey') {
-                            cell.clearSpawn();
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'grey') {
+                            cell.clearCellType();
                         } else {
-                            cell.setSpawn('grey')
+                            cell.setCellType('grey');
                         }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
 
                 if (this.mode === 'greenTankSpawn') {
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
                         let cell = this.map[yPos][xPos];
-                        if (cell.getSpawn() === 'green') {
-                            cell.clearSpawn();
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'green') {
+                            cell.clearCellType();
                         } else {
-                            cell.setSpawn('green')
+                            cell.setCellType('green');
                         }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
 
                 if (this.mode === 'pinkTankSpawn') {
                     if (yPos > 0 && yPos < this.map.length - 1 && xPos > 0 && xPos < this.map[0].length - 1) {
                         let cell = this.map[yPos][xPos];
-                        if (cell.getSpawn() === 'pink') {
-                            cell.clearSpawn();
+                        this.app.stage.removeChild(cell.body);
+                        if (cell.getCellType() === 'pink') {
+                            cell.clearCellType();
                         } else {
-                            cell.setSpawn('pink')
+                            cell.setCellType('pink');
                         }
+                        this.app.stage.addChild(cell.body);
+                        this.drawGridLines();
                     }
                 }
             }
@@ -321,6 +380,38 @@ export class MapBuilder {
                 this.heldDownRight = false;
             }
         });
+    }
+
+    drawGridLines() {
+        this.gridLines.clear();
+        this.gridLines.lineStyle(1, 0xcccccc, 1);
+
+        // Draw horizontal lines
+        for (let i = 0; i <= this.rows; i++) {
+            this.gridLines.moveTo(0, i * this.cellHeight);
+            this.gridLines.lineTo(this.cols * this.cellWidth, i * this.cellHeight);
+        }
+
+        // Draw vertical lines
+        for (let j = 0; j <= this.cols; j++) {
+            this.gridLines.moveTo(j * this.cellWidth, 0);
+            this.gridLines.lineTo(j * this.cellWidth, this.rows * this.cellHeight);
+        }
+        this.app.stage.addChild(this.gridLines);
+    }
+
+    getCellTypeFromValue(value) {
+        switch (value) {
+            case 0: return 'path';
+            case 1: return 'wall';
+            case 2: return 'hole';
+            case 3: return 'player';
+            case 4: return 'brown';
+            case 5: return 'grey';
+            case 6: return 'green';
+            case 7: return 'pink';
+            default: return 'path';
+        }
     }
 
     pointToLineDistance(point, lineStart, lineEnd) {
@@ -382,51 +473,23 @@ export class MapBuilder {
         return { map: loadedMap, lines: loadedLines };
     }
 
-    // empty = 0
+    // path = 0
     // wall = 1
-    // player = 2
-    // brown = 3
-    // grey = 4
-    // green = 5
-    // pink = 6
+    // hole = 2
+    // player = 3
+    // brown = 4
+    // grey = 5
+    // green = 6
+    // pink = 7
     updateMap(loadedData) {
         let inputMap = loadedData.map;
         for (let i = 0; i < inputMap.length; i++) {
             for (let j = 0; j < inputMap[i].length; j++) {
-                // This is not optimal but very easy to read      
+                // This is not optimal but very easy to read
                 let currentCell = this.map[i][j];
-                if (inputMap[i][j] === 0) {
-                    currentCell.setWall(false);
-                }
-
-                if (inputMap[i][j] === 1) {
-                    currentCell.setWall(true);
-                }
-
-                if (inputMap[i][j] === 2) {
-                    currentCell.setWall(false);
-                    currentCell.setSpawn('player');
-                }
-
-                if (inputMap[i][j] === 3) {
-                    currentCell.setWall(false);
-                    currentCell.setSpawn('brown');
-                }
-
-                if (inputMap[i][j] === 4) {
-                    currentCell.setWall(false);
-                    currentCell.setSpawn('grey');
-                }
-
-                if (inputMap[i][j] === 5) {
-                    currentCell.setWall(false);
-                    currentCell.setSpawn('green');
-                }
-
-                if (inputMap[i][j] === 6) {
-                    currentCell.setWall(false);
-                    currentCell.setSpawn('pink');
-                }
+                this.app.stage.removeChild(currentCell.body);
+                currentCell.setCellType(this.getCellTypeFromValue(inputMap[i][j]));
+                this.app.stage.addChild(currentCell.body)
             }
         }
 
@@ -442,6 +505,8 @@ export class MapBuilder {
             lineCoords.push(line)
             this.collisionLines.push(lineCoords);
         });
+
+        this.drawGridLines();
     }
 
     cleanup() {

@@ -3,6 +3,7 @@ import { Cell } from "./Cell.js"
 import { BrownTank } from "./EnemyTypes/BrownTank.js"
 import { GreyTank } from "./EnemyTypes/GrayTank.js";
 import { GreenTank } from "./EnemyTypes/GreenTank.js";
+import { PinkTank } from "./EnemyTypes/PinkTank.js";
 
 export class Game {
     constructor() {
@@ -12,7 +13,8 @@ export class Game {
             backgroundColor: 0xffffff
         });
 
-        this.file = "./Maps/level2.txt"
+        this.file = "./Maps/level10.txt"; // Start from level 1
+        this.currentLevel = 10; // Add a property to track the current level
 
         this.physicalMap = []; // All the physical walls
         this.tanks = [];
@@ -26,6 +28,7 @@ export class Game {
         this.mouseX = 0;
         this.mouseY = 0;
         this.player = new Player(700, 100, 18, 18, 2, this.app);
+        this.loadedLevel = false;
     }
 
     setup() {
@@ -38,27 +41,13 @@ export class Game {
                 }
             });
         }
-
-        document.getElementById('fileInput').addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) {
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const fileContent = e.target.result;
-                let loadedMap = this.loadMapFromFile(fileContent);
-                this.updateMap(loadedMap);
-            };
-
-            reader.readAsText(file);
-        });
     }
 
     initGame(loadedData) {
         this.updateMap(loadedData);
 
+        this.app.ticker.speed = 1;
+        this.app.ticker.maxFPS = 0;
         this.app.ticker.add((delta) => this.gameLoop(delta));
 
         this.app.renderer.plugins.interaction.on('pointermove', (e) => {
@@ -149,9 +138,9 @@ export class Game {
         for (let i = 0; i < gridRows; i++) {
             for (let j = 0; j < gridCols; j++) {
                 this.physicalMap[i][j].dangerValue = 0
-                if (this.physicalMap.isWall) {
-                    this.physicalMap[i][j].body.tint = 0xFFFFFF;
-                }
+                // if (this.physicalMap[i][j].getCellType() === 'wall') {
+                //     this.physicalMap[i][j].body.tint = 0xFFFFFF;
+                // }
             }
         }
 
@@ -193,7 +182,7 @@ export class Game {
 
         while (true) {
             // Check if the current cell is a wall
-            if (this.physicalMap[startRow][startCol].isWall) {
+            if (this.physicalMap[startRow][startCol].getCellType() === 'wall') {
                 return true; // Wall is blocking the line of sight
             }
 
@@ -216,45 +205,13 @@ export class Game {
     updateGridColors(maxDangerValue) {
         for (let i = 0; i < this.physicalMap.length; i++) {
             for (let j = 0; j < this.physicalMap[i].length; j++) {
-                if (!this.physicalMap[i][j].isWall) {
+                if (!(this.physicalMap[i][j].getCellType() === 'wall')) {
                     let dangerValue = this.physicalMap[i][j].dangerValue
                     let color = this.getColorFromDangerValue(dangerValue, maxDangerValue);
                     this.physicalMap[i][j].body.tint = color;
                 }
             }
         }
-    }
-
-    // loadMapFromFile(fileContent) {
-    //     let loadedMap = fileContent.split('\n').map(line => line.trim().split(' ').map(Number));
-    //     return loadedMap;
-    // }
-
-    loadMapFromFile(fileContent) {
-        // Normalize newlines (convert all to Unix-style)
-        fileContent = fileContent.replace(/\r\n/g, '\n');
-
-        // Split the file content into wall data and collision line data
-        const sections = fileContent.trim().split('\n\n');
-
-        let wallData = sections[0];
-        let lineData = sections.length > 1 ? sections[1] : '';
-
-        // Process wall data
-        let loadedMap = wallData.split('\n').map(row => row.trim().split(' ').map(Number));
-
-        // Process collision line data
-        let loadedLines = [];
-        if (lineData) {
-            lineData.split('\n').forEach(line => {
-                let coords = line.split(' ').map(Number);
-                if (coords.length === 4) { // Ensure the line has exactly four coordinates
-                    loadedLines.push(coords);
-                }
-            });
-        }
-
-        return { map: loadedMap, lines: loadedLines };
     }
 
     async loadMapFromPath(filePath) {
@@ -294,6 +251,14 @@ export class Game {
         }
     }
 
+    // path = 0
+    // wall = 1
+    // hole = 2
+    // player = 3
+    // brown = 4
+    // grey = 5
+    // green = 6
+    // pink = 7
     updateMap(loadedData) {
         this.tanks = [];
         let inputMap = loadedData.map;
@@ -302,7 +267,7 @@ export class Game {
         for (let i = 0; i < inputMap.length; i++) {
             this.physicalMap[i] = [];
             for (let j = 0; j < inputMap[i].length; j++) {
-                this.physicalMap[i][j] = new Cell(j * this.cellWidth, i * this.cellHeight, this.cellWidth, this.cellHeight, -1, false);
+                this.physicalMap[i][j] = new Cell(j * this.cellWidth, i * this.cellHeight, this.cellWidth, this.cellHeight, 'path');
                 this.app.stage.addChild(this.physicalMap[i][j].body);
             }
         }
@@ -314,48 +279,48 @@ export class Game {
                 let newTank = null;
                 // This is not optimal but very easy to read      
                 let currentCell = this.physicalMap[i][j];
-                if (inputMap[i][j] === 0) {
-                    currentCell.setWall(false);
-                }
 
                 if (inputMap[i][j] === 1) {
-                    currentCell.setWall(true);
+                    this.app.stage.removeChild(currentCell.body);
+                    currentCell.setCellType('wall')
+                    this.app.stage.addChild(currentCell.body);
                 }
 
                 if (inputMap[i][j] === 2) {
-                    currentCell.setWall(false);
+                    this.app.stage.removeChild(currentCell.body);
+                    currentCell.setCellType('hole')
+                    this.app.stage.addChild(currentCell.body);
+                }
+
+                if (inputMap[i][j] === 3) {
                     this.player = new Player(j * this.cellWidth, i * this.cellHeight, 18, 18, 2, this.app);
                     newTank = new Player(j * this.cellWidth, i * this.cellHeight, 18, 18, 2, this.app);
                     this.tanks.push(this.player)
                     this.app.stage.addChild(this.player.body);
                 }
 
-                if (inputMap[i][j] === 3) {
-                    currentCell.setWall(false);
+                if (inputMap[i][j] === 4) {
                     newTank = new BrownTank(j * this.cellWidth, i * this.cellHeight, 18, 18);
                     this.tanks.push(newTank);
                     this.app.stage.addChild(newTank.body);
                     // Brown tank is stationary, needs no pathfinder
                 }
 
-                if (inputMap[i][j] === 4) {
-                    currentCell.setWall(false);
-                    newTank = new GreyTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 1.25);
-                    this.tanks.push(newTank);
-                    this.app.stage.addChild(newTank.body);
-                    newTank.setPathfinder(this.physicalMap);
-                }
-
                 if (inputMap[i][j] === 5) {
-                    currentCell.setWall(false);
-                    newTank = new GreenTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 1.75);
+                    newTank = new GreyTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 1.4);
                     this.tanks.push(newTank);
                     this.app.stage.addChild(newTank.body);
                     newTank.setPathfinder(this.physicalMap);
                 }
 
                 if (inputMap[i][j] === 6) {
-                    currentCell.setWall(false);
+                    newTank = new GreenTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 1.75);
+                    this.tanks.push(newTank);
+                    this.app.stage.addChild(newTank.body);
+                    newTank.setPathfinder(this.physicalMap);
+                }
+
+                if (inputMap[i][j] === 7) {
                     newTank = new PinkTank(j * this.cellWidth, i * this.cellHeight, 18, 18, 2);
                     this.tanks.push(newTank);
                     this.app.stage.addChild(newTank.body);
@@ -376,13 +341,61 @@ export class Game {
             lineCoords.push(line)
             this.collisionLines.push(lineCoords);
         });
+
+        this.loadedLevel = true;
     }
+
+    async advanceToNextLevel() {
+        this.loadedLevel = false;
+        this.currentLevel += 1;
+        let nextLevelFile = `./Maps/level${this.currentLevel}.txt`;
+
+        try {
+            const loadedData = await this.loadMapFromPath(nextLevelFile);
+            if (loadedData) {
+                this.resetGame();
+                this.updateMap(loadedData);
+                this.loadedLevel = true;
+            } else {
+                // No more levels available
+                console.log("No more levels available! Game completed.");
+                // Optionally, add a function here to handle game completion
+            }
+        } catch (error) {
+            console.error("Error loading the next level:", error);
+        }
+    }
+
+
+    async reloadCurrentLevel() {
+        let currentLevelFile = `./Maps/level${this.currentLevel}.txt`;
+
+        try {
+            const loadedData = await this.loadMapFromPath(currentLevelFile);
+            if (loadedData) {
+                this.resetGame();
+                this.updateMap(loadedData);
+                this.loadedLevel = true;
+            } else {
+                console.error("Error reloading the current level.");
+            }
+        } catch (error) {
+            console.error("Error reloading the current level:", error);
+        }
+    }
+
+    resetGame() {
+        this.allBullets = [];
+        this.tanks = [];
+        this.app.stage.removeChildren();
+    }
+
     gameLoop(delta) {
         this.updateGridDangerValues(this.allBullets, this.player, 1.0, 1.0, 25);
-        this.updateGridColors(0.5);
-        this.player.update(delta, this.collisionLines, this.mouseX, this.mouseY);
+        // this.updateGridColors(0.5);
+        this.player.update(delta, this.collisionLines, this.mouseX, this.mouseY, this.physicalMap, this.app);
 
-        // Updating all tank bullets
+        // Updating all tanks
         for (let t = 0; t < this.tanks.length; t++) {
             let tank = this.tanks[t];
 
@@ -390,7 +403,7 @@ export class Game {
             // Currently all AIs can only shoot 1 bullet at a time
             // May add future tank that can shoot multiple
             if (tank != this.player) {
-                let firedBullets = tank.update(delta, this.physicalMap, this.player, this.collisionLines, this.allBullets, this.tanks)
+                let firedBullets = tank.update(delta, this.physicalMap, this.player, this.collisionLines, this.allBullets, this.tanks, this.app)
 
                 if (firedBullets && firedBullets.length > 0) {
                     for (let i = 0; i < firedBullets.length; i++) {
@@ -407,9 +420,10 @@ export class Game {
             if (collided) {
                 this.app.stage.removeChild(collided.tank.body);
                 this.tanks.splice(collided.tankIndex, 1);
+                collided.tank.setAlive(false)
 
                 this.app.stage.removeChild(bullet.body);
-                bullet.owner.firedBullet -= 1
+                bullet.owner.firedBullets -= 1
                 this.allBullets.splice(i, 1)
             } else {
                 bullet.update(delta, this.collisionLines, this.allBullets);
@@ -420,6 +434,15 @@ export class Game {
                     this.allBullets.splice(i, 1)
                 }
             }
+        }
+
+        // Level system
+        if (!this.player.isAlive()) {
+            this.reloadCurrentLevel();
+        }
+
+        if (this.loadedLevel && this.tanks.length === 1 && this.tanks[0] === this.player) {
+            this.advanceToNextLevel();
         }
     }
 

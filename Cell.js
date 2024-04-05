@@ -1,60 +1,65 @@
 export class Cell {
-    constructor(x, y, width, height, health, isWall) {
-        this.isWall = isWall;
+    constructor(x, y, width, height, cellType) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.cellType = cellType;
 
-        let cell = new PIXI.Graphics();
-        cell.beginFill(0xFFFFFF)
-        cell.drawRect(0, 0, width, height);
-        cell.endFill();
-        cell.tint = isWall ? 0x303030 : 0xFFFFFF
-
-        this.body = cell;
-        this.spawnType = null;
-
+        this.createBody();
         this.body.position.set(x, y);
     }
 
-    setWall(isWall) {
-        this.clearSpawn();
-        this.body.tint = isWall ? 0x303030 : 0xFFFFFF
-        this.isWall = isWall;
-    }
-
-    // Setting spawn should only be used in map builder
-    setSpawn(spawnType) {
-        this.spawnType = spawnType;
-
-        if (this.isWall) {
-            this.isWall = false;
-        }
-
-        if (spawnType === 'player') {
-            this.body.tint = 0x0000dd;
-        }
-
-        if (spawnType === 'brown') {
-            this.body.tint = 0xac6902;
-        }
-
-        if (spawnType === 'grey') {
-            this.body.tint = 0xa8a8a8;
-        }
-
-        if (spawnType === 'green') {
-            this.body.tint = 0x009530;
-        }
-
-        if (spawnType === 'pink') {
-            this.body.tint = 0xC35C70;
+    createBody() {
+        if (this.cellType === 'wall' || this.cellType === 'path' || this.cellType === 'player' || this.cellType === 'brown' || this.cellType === 'grey' || this.cellType === 'green' || this.cellType === 'pink') {
+            let cell = new PIXI.Graphics();
+            cell.beginFill(this.getColor());
+            cell.drawRect(0, 0, this.width, this.height);
+            cell.endFill();
+            this.body = cell;
+        } else if (this.cellType === 'hole') {
+            let hole = new PIXI.Graphics();
+            hole.beginFill(0x101010);
+            hole.drawCircle(this.width / 2, this.height / 2, Math.min(this.width, this.height) / 2 * 0.9);
+            hole.endFill();
+            this.body = hole;
         }
     }
-    
-    getSpawn() {
-        return this.spawnType;
+
+    setCellType(type) {
+        if (this.cellType !== type) {
+            this.cellType = type;
+            this.createBody();
+            this.body.position.set(this.x, this.y);
+        }
     }
 
-    clearSpawn() {
-        this.spawnType = null;
-        this.body.tint = 0xFFFFFF;
+    getCellType() {
+        return this.cellType;
+    }
+
+    clearCellType() {
+        this.setCellType('path');
+    }
+
+    getColor() {
+        switch (this.cellType) {
+            case 'wall':
+                return 0x303030;
+            case 'path':
+                return 0xFFFFFF;
+            case 'player':
+                return 0x0000dd;
+            case 'brown':
+                return 0xac6902;
+            case 'grey':
+                return 0xa8a8a8;
+            case 'green':
+                return 0x009530;
+            case 'pink':
+                return 0xC35C70;
+            default:
+                return 0xFFFFFF;
+        }
     }
 }

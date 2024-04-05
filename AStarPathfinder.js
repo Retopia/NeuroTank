@@ -30,7 +30,7 @@ export class AStarPathfinder {
             closedSet.add(currentNode);
 
             for (let neighbor of this.getNeighbors(currentNode)) {
-                if (closedSet.has(neighbor) || neighbor.cell.isWall) {
+                if (closedSet.has(neighbor) || neighbor.cell.getCellType() === 'wall') {
                     continue;
                 }
 
@@ -52,31 +52,35 @@ export class AStarPathfinder {
         return [];
     }
 
+    isWallOrHole(cell) {
+        return cell.getCellType() === 'wall' || cell.getCellType() === 'hole';
+    }
+
     getNeighbors(node) {
         const neighbors = [];
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
                 if (dx === 0 && dy === 0) continue;
-                const checkX = node.x + dx;
-                const checkY = node.y + dy;
-    
+                const checkX = Math.floor(node.x + dx);
+                const checkY = Math.floor(node.y + dy);
+
                 if (checkX >= 0 && checkX < this.grid[0].length && checkY >= 0 && checkY < this.grid.length) {
                     let neighbor = this.grid[checkY][checkX];
-    
+
                     // Check for diagonal movement
                     if (dx !== 0 && dy !== 0) {
-                        // For diagonal, both adjacent orthogonal cells must be non-wall
-                        let side1 = this.grid[node.y][checkX];
-                        let side2 = this.grid[checkY][node.x];
-    
-                        if (side1.cell.isWall || side2.cell.isWall || this.isAdjacentToWall(neighbor)) {
-                            continue; // Skip this neighbor as it's a corner-cutting move or adjacent to a wall
+                        // For diagonal, both adjacent orthogonal cells must be non-wall and non-hole
+                        let side1 = this.grid[Math.floor(node.y)][checkX];
+                        let side2 = this.grid[checkY][Math.floor(node.x)];
+
+                        if (this.isWallOrHole(side1.cell) || this.isWallOrHole(side2.cell) || this.isAdjacentToWallOrHole(neighbor)) {
+                            continue; // Skip this neighbor as it's a corner-cutting move or adjacent to a wall or hole
                         }
-                    } else if (this.isAdjacentToWall(neighbor)) {
-                        continue; // Skip neighbors adjacent to walls for non-diagonal moves
+                    } else if (this.isAdjacentToWallOrHole(neighbor)) {
+                        continue; // Skip neighbors adjacent to walls or holes for non-diagonal moves
                     }
-    
-                    if (!neighbor.cell.isWall) {
+
+                    if (!this.isWallOrHole(neighbor.cell)) {
                         neighbors.push(neighbor);
                     }
                 }
@@ -84,22 +88,23 @@ export class AStarPathfinder {
         }
         return neighbors;
     }
-    
-    isAdjacentToWall(node) {
+
+    isAdjacentToWallOrHole(node) {
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
-                const checkX = node.x + dx;
-                const checkY = node.y + dy;
+                const checkX = Math.floor(node.x + dx);
+                const checkY = Math.floor(node.y + dy);
+
                 if (checkX >= 0 && checkX < this.grid[0].length && checkY >= 0 && checkY < this.grid.length) {
-                    if (this.grid[checkY][checkX].cell.isWall) {
-                        return true; // Adjacent to a wall
+                    if (this.isWallOrHole(this.grid[checkY][checkX].cell)) {
+                        return true; // Adjacent to a wall or hole
                     }
                 }
             }
         }
-        return false; // Not adjacent to any wall
+        return false; // Not adjacent to any wall or hole
     }
-    
+
     heuristic(nodeA, nodeB) {
         const distX = Math.abs(nodeA.x - nodeB.x);
         const distY = Math.abs(nodeA.y - nodeB.y);
